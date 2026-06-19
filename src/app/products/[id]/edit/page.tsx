@@ -1,6 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ProductEditor } from "@/components/product-editor";
-import { adminProducts } from "@/lib/admin-data";
+import { getAdminProductGroup } from "@/lib/admin-products";
 
 export default async function EditProductPage({
   params,
@@ -8,9 +8,16 @@ export default async function EditProductPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const product = adminProducts.find((item) => item.id === id);
+  const { authRequired, groupSku, product, variants } =
+    await getAdminProductGroup(id);
+
+  if (authRequired) {
+    redirect("/login");
+  }
 
   if (!product) notFound();
 
-  return <ProductEditor product={product} />;
+  return (
+    <ProductEditor id={id} groupSku={groupSku} product={product} variants={variants} />
+  );
 }

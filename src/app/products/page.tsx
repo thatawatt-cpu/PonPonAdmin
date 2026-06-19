@@ -1,51 +1,210 @@
-import Image from "next/image";
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { adminProducts, type SyncStatus } from "@/lib/admin-data";
+import {
+  getAdminCategories,
+  getAdminProducts,
+  type AdminProduct,
+} from "@/lib/admin-products";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ProductFilterBar } from "@/components/product-filter-bar";
+import { ProductGroupCard, type ProductGroup } from "@/components/product-group-card";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
 
-const syncLabel: Record<SyncStatus, string> = {
-  synced: "ZORT ซิงก์แล้ว",
-  pending: "รอจับคู่ SKU",
-  error: "Sync มีปัญหา",
-};
+const PAGE_SIZE = 12;
 
-const syncStyle: Record<SyncStatus, string> = {
-  synced: "bg-emerald-50 text-emerald-700",
-  pending: "bg-amber-50 text-amber-700",
-  error: "bg-red-50 text-red-700",
-};
 
-export default function ProductsPage() {
+export default async function ProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { page: pageParam, q, category } = await searchParams;
+  const currentPage = Math.max(1, parseInt(String(pageParam ?? "1"), 10) || 1);
+  const searchQuery = typeof q === "string" ? q.trim().toLowerCase() : "";
+  const categoryFilter = typeof category === "string" ? category : "";
+
+  const [productResult, { categories }] = await Promise.all([
+    getAdminProducts(),
+    getAdminCategories(),
+  ]);
+  const { authRequired, error, products, source } = productResult;
+
+  if (authRequired) {
+    redirect("/login");
+  }
+
+  let allGroups = groupProductsBySku(products);
+  if (searchQuery) {
+    allGroups = allGroups.filter((group) =>
+      group.products.some(
+        (p) =>
+          p.name.toLowerCase().includes(searchQuery) ||
+          p.zortSku.toLowerCase().includes(searchQuery) ||
+          group.groupSku.toLowerCase().includes(searchQuery),
+      ),
+    );
+  }
+
+  if (categoryFilter && categoryFilter !== "all") {
+    allGroups = allGroups.filter((group) =>
+      group.products.some((p) => p.category === categoryFilter),
+    );
+  }
+
+  const totalPages = Math.max(1, Math.ceil(allGroups.length / PAGE_SIZE));
+  const page = Math.min(currentPage, totalPages);
+  const productGroups = allGroups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Catalog" title="จัดการสินค้า" description="แก้ไขข้อมูลสินค้า ราคา รูปภาพ ตัวเลือก และสต็อกที่แสดงในหน้าร้าน" action={<button className="rounded-full bg-red-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-600/20">+ เพิ่มสินค้า</button>} />
-      <section className="rounded-3xl bg-white p-4 shadow-[0_18px_45px_rgba(65,25,25,0.08)] ring-1 ring-red-100/70">
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <input placeholder="ค้นหาชื่อสินค้า หรือ SKU" className="h-11 flex-1 rounded-2xl bg-[#fff8f6] px-4 text-sm outline-none ring-red-200 focus:ring-2" />
-          <select className="h-11 rounded-2xl bg-[#fff8f6] px-4 text-sm font-bold outline-none"><option>ทุกหมวดหมู่</option><option>ขนม</option><option>เครื่องดื่ม</option><option>แฟชั่น</option></select>
-        </div>
-      </section>
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {adminProducts.map((product) => (
-          <article key={product.id} className="overflow-hidden rounded-3xl bg-white shadow-[0_18px_45px_rgba(65,25,25,0.08)] ring-1 ring-red-100/70">
-            <div className="relative aspect-[1.6/1] bg-[#fff8f6]">
-              <Image src={product.image} alt={product.name} fill className="object-contain p-3" sizes="(max-width: 640px) 100vw, 33vw" />
-              <span className={`absolute right-3 top-3 rounded-full px-3 py-1 text-xs font-black ${product.stock === 0 ? "bg-red-600 text-white" : product.stock <= 18 ? "bg-amber-100 text-amber-700" : "bg-white text-emerald-600"}`}>{product.stock === 0 ? "สินค้าหมด" : `คงเหลือ ${product.stock}`}</span>
-            </div>
-            <div className="p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold text-red-600">{product.category}</p>
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${syncStyle[product.syncStatus]}`}>
-                  {syncLabel[product.syncStatus]}
-                </span>
-              </div>
-              <h2 className="mt-1 font-black">{product.name}</h2>
-              <p className="mt-1 text-[11px] text-zinc-400">{product.zortSku} · {product.lastSyncedAt}</p>
-              <div className="mt-4 flex items-end justify-between"><div><p className="text-xl font-black text-red-600">฿{product.price}</p><p className="text-xs text-zinc-500">ขายแล้ว {product.sold.toLocaleString()} ชิ้น</p></div><Link href={`/products/${product.id}/edit`} className="rounded-full border border-red-200 px-4 py-2 text-xs font-black text-red-600 transition hover:bg-red-600 hover:text-white">แก้ไข</Link></div>
-            </div>
-          </article>
+      <PageHeader
+        eyebrow="แค็ตตาล็อก"
+        title="จัดการสินค้า"
+        description="แก้ไขข้อมูลสินค้า ราคา รูปภาพ ตัวเลือก และสต็อกที่แสดงในหน้าร้าน"
+        action={<button className={buttonVariants()}>+ เพิ่มสินค้า</button>}
+      />
+
+      <Card>
+        <CardContent className="pt-4">
+          <ProductFilterBar categories={categories} />
+        </CardContent>
+      </Card>
+
+      {source === "mock" ? (
+        <Alert>
+          <AlertDescription>
+            ใช้ข้อมูล mock อยู่ เพราะเรียก PonPon API ไม่สำเร็จ
+            {error ? ` (${error})` : ""}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <section className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+        {productGroups.map((group) => (
+          <ProductGroupCard key={group.groupSku} group={group} />
         ))}
       </section>
+
+      {totalPages > 1 ? (
+        <Pagination current={page} total={totalPages} query={{ q: searchQuery, category: categoryFilter }} />
+      ) : null}
     </div>
   );
 }
+
+function Pagination({
+  current,
+  total,
+  query,
+}: {
+  current: number;
+  total: number;
+  query: { q: string; category: string };
+}) {
+  const pages = buildPageList(current, total);
+
+  function pageHref(p: number) {
+    const params = new URLSearchParams();
+    if (query.q) params.set("q", query.q);
+    if (query.category && query.category !== "all") params.set("category", query.category);
+    params.set("page", String(p));
+    return `/products?${params.toString()}`;
+  }
+
+  return (
+    <nav className="flex items-center justify-center gap-1" aria-label="Pagination">
+      <PaginationLink href={pageHref(current - 1)} disabled={current <= 1} aria-label="หน้าก่อน">
+        <ChevronLeft className="size-4" />
+      </PaginationLink>
+
+      {pages.map((p, i) =>
+        p === "..." ? (
+          <span key={`ellipsis-${i}`} className="flex size-9 items-center justify-center text-sm text-muted-foreground">
+            …
+          </span>
+        ) : (
+          <PaginationLink
+            key={p}
+            href={pageHref(p)}
+            isActive={p === current}
+            aria-label={`หน้า ${p}`}
+            aria-current={p === current ? "page" : undefined}
+          >
+            {p}
+          </PaginationLink>
+        )
+      )}
+
+      <PaginationLink href={pageHref(current + 1)} disabled={current >= total} aria-label="หน้าถัดไป">
+        <ChevronRight className="size-4" />
+      </PaginationLink>
+    </nav>
+  );
+}
+
+function PaginationLink({
+  href,
+  isActive,
+  disabled,
+  children,
+  ...props
+}: {
+  href: string;
+  isActive?: boolean;
+  disabled?: boolean;
+} & Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "href">) {
+  const base = "flex size-9 items-center justify-center rounded-md text-sm font-medium transition-colors";
+  const active = "bg-primary text-primary-foreground";
+  const idle = "border border-border hover:bg-accent hover:text-accent-foreground";
+  const disabledCls = "pointer-events-none opacity-40 border border-border";
+
+  if (disabled) {
+    return (
+      <span className={cn(base, disabledCls)} {...(props as React.HTMLAttributes<HTMLSpanElement>)}>
+        {children}
+      </span>
+    );
+  }
+
+  return (
+    <Link href={href} className={cn(base, isActive ? active : idle)} {...props}>
+      {children}
+    </Link>
+  );
+}
+
+function buildPageList(current: number, total: number): (number | "...")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+
+  const pages: (number | "...")[] = [1];
+
+  if (current > 3) pages.push("...");
+  for (let p = Math.max(2, current - 1); p <= Math.min(total - 1, current + 1); p++) {
+    pages.push(p);
+  }
+  if (current < total - 2) pages.push("...");
+
+  pages.push(total);
+  return pages;
+}
+
+function groupProductsBySku(products: AdminProduct[]): ProductGroup[] {
+  const groups = new Map<string, AdminProduct[]>();
+
+  for (const product of products) {
+    const groupSku = product.baseSku || product.id;
+    const group = groups.get(groupSku) ?? [];
+    group.push(product);
+    groups.set(groupSku, group);
+  }
+
+  return Array.from(groups, ([groupSku, groupedProducts]) => ({
+    groupSku,
+    products: groupedProducts.sort((a, b) => a.zortSku.localeCompare(b.zortSku)),
+  }));
+}
+

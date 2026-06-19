@@ -12,13 +12,13 @@ export function PageHeader({
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <p className="text-xs font-black uppercase tracking-[0.22em] text-red-600">
+        <p className="text-[11px] font-black uppercase tracking-[0.15em] text-muted-foreground">
           {eyebrow}
         </p>
-        <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
+        <h1 className="mt-1.5 text-3xl font-black tracking-tight sm:text-4xl">
           {title}
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
+        <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
           {description}
         </p>
       </div>

@@ -232,7 +232,7 @@ export function ShadcnProductContentEditor({
           onMouseDown={(event) => event.preventDefault()}
         >
           <Select defaultValue="p" onValueChange={setBlock}>
-            <SelectTrigger className="h-8 w-[110px] text-xs">
+            <SelectTrigger size="sm" className="w-[120px]">
               <SelectValue placeholder="ย่อหน้า" />
             </SelectTrigger>
             <SelectContent>
@@ -351,7 +351,7 @@ function FormatToggle({
       type="button"
       variant="ghost"
       size="sm"
-      className="h-8 px-2"
+      className="px-2.5"
       aria-label={label}
       onClick={onClick}
     >
@@ -374,7 +374,7 @@ function ToolbarButton({
       type="button"
       variant="ghost"
       size="sm"
-      className="h-8 px-2"
+      className="px-2.5"
       aria-label={label}
       onClick={onClick}
     >

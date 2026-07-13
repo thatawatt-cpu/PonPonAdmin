@@ -20,6 +20,7 @@ export default async function EditFlashSalePage({
     name: flashSale.name,
     startDate: flashSale.startDate,
     endDate: flashSale.endDate,
+    isActive: flashSale.isActive,
     slots: flashSale.slots,
     products: flashSale.products.map((p) => ({
       id: p.productId,
@@ -28,6 +29,8 @@ export default async function EditFlashSalePage({
       originalPrice: p.originalPrice,
       salePrice: p.salePrice,
       zortSku: "",
+      quantityLimit: p.quantityLimit,
+      reservedQuantity: p.reservedQuantity,
     })),
   };
 

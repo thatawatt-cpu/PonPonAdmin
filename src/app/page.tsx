@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import type { ComponentType, ReactNode } from "react";
 import {
@@ -9,14 +10,11 @@ import {
   Package,
   PackageCheck,
   PackageOpen,
-  ReceiptText,
-  RefreshCw,
+  RotateCcw,
   ShoppingCart,
-  Tags,
-  Truck,
 } from "lucide-react";
-import { adminCoupons, adminOrders } from "@/lib/admin-data";
-import { getAdminProducts } from "@/lib/admin-products";
+import { DashboardSalesCard } from "@/components/dashboard-sales-card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -35,120 +33,119 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  getAdminDashboard,
+  type DashboardOrder,
+  type DashboardAttentionProduct,
+  type DashboardPeriod,
+  type DashboardSyncRun,
+} from "@/lib/admin-dashboard";
 import { cn } from "@/lib/utils";
 
-function isCancelled(status: string) {
-  return status.includes("ยกเลิก");
-}
-
-function isCodPayment(payment: string) {
-  return payment.toLowerCase().includes("cod") || payment.includes("ปลายทาง");
-}
-
-function isSlipWaiting(status: string) {
-  return status.includes("สลิป");
-}
-
-export default async function DashboardPage() {
-  const { authRequired, products } = await getAdminProducts();
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ period?: string | string[] }>;
+}) {
+  const selectedSalesPeriod = parseSalesPeriod(
+    (await searchParams)?.period,
+  );
+  const dashboardResult = await getAdminDashboard(selectedSalesPeriod);
+  const { authRequired, dashboard, error, syncRuns } = dashboardResult;
 
   if (authRequired) {
     redirect("/login");
   }
 
-  const activeOrders = adminOrders.filter((order) => !isCancelled(order.status));
-  const waitingSlipOrders = adminOrders.filter((order) =>
-    isSlipWaiting(order.status),
-  );
-  const codOrders = adminOrders.filter((order) => isCodPayment(order.payment));
-  const gatewayOrders = adminOrders.filter(
-    (order) => !isCodPayment(order.payment),
-  );
-  const lowStock = products.filter((product) => product.stock <= 18);
-  const outOfStock = products.filter((product) => product.stock === 0);
-  const activeCoupons = adminCoupons.filter((coupon) => coupon.active);
-  const packingOrders = activeOrders.filter((order) =>
-    order.status.includes("แพ็ก"),
-  );
-  const completedOrders = adminOrders.filter((order) =>
-    order.status.includes("สำเร็จ"),
-  );
-  const syncedProducts = products.filter((item) => item.syncStatus === "synced");
-  const pendingSyncProducts = products.filter(
-    (item) => item.syncStatus === "pending",
-  );
-  const syncErrorProducts = products.filter((item) => item.syncStatus === "error");
-  const productsNeedingAttention = products.filter(
-    (product) => product.stock <= 18 || product.syncStatus === "error",
-  );
+  if (!dashboard) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle />
+        <AlertTitle>โหลดข้อมูล Dashboard ไม่สำเร็จ</AlertTitle>
+        <AlertDescription>
+          กรุณาตรวจสอบการเชื่อมต่อ API แล้วลองเปิดหน้าใหม่
+          {error ? ` (${error})` : ""}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const attentionProducts = dashboard.inventory.attentionProducts;
+  const attentionIssueCounts = countAttentionIssues(attentionProducts);
+  const attentionLowStockCount =
+    dashboard.inventory.lowStock > 0
+      ? dashboard.inventory.lowStock
+      : attentionIssueCounts.lowStock;
+  const attentionOutOfStockCount =
+    dashboard.inventory.outOfStock > 0
+      ? dashboard.inventory.outOfStock
+      : attentionIssueCounts.outOfStock;
+  const attentionVariantCount =
+    attentionLowStockCount + attentionOutOfStockCount;
+
   const urgentTasks = [
     {
-      action: "ไปตรวจสลิป",
-      count: waitingSlipOrders.length,
-      href: "/orders",
-      icon: ReceiptText,
-      label: "รอตรวจสลิป",
-    },
-    {
       action: "ไปจัดการออเดอร์",
-      count: packingOrders.length,
+      count: dashboard.orders.awaitingPacking,
       href: "/orders",
       icon: PackageCheck,
       label: "รอแพ็กสินค้า",
     },
     {
-      action: "ไปดู COD",
-      count: codOrders.length,
-      href: "/orders",
-      icon: Truck,
-      label: "COD รอยืนยัน",
+      action: "ไปตรวจสอบคำขอ",
+      count: dashboard.orders.returnRequests,
+      href: "/orders?returnRequestStatus=Pending",
+      icon: RotateCcw,
+      label: "คำขอคืนสินค้า",
+    },
+    {
+      action: "ไปยืนยันการคืนเงิน",
+      count: dashboard.orders.refundRequests,
+      href: "/orders?refundRequestStatus=Pending",
+      icon: Banknote,
+      label: "คำขอคืนเงิน",
     },
     {
       action: "ไปหน้าสินค้า",
-      count: lowStock.length,
+      count: attentionVariantCount,
       href: "/products",
       icon: PackageOpen,
-      label: "สินค้าใกล้หมด",
+      label: "Variant ที่ต้องดูแล",
     },
     {
       action: "เปิด Integration",
-      count: syncErrorProducts.length,
+      count: dashboard.zortSync.failed,
       href: "/integrations/zort",
       icon: AlertCircle,
       label: "ZORT Sync พบปัญหา",
     },
   ];
-  const revenue = activeOrders.reduce((sum, order) => sum + order.total, 0);
-  const averageOrderValue = activeOrders.length
-    ? Math.round(revenue / activeOrders.length)
-    : 0;
+  const sortedUrgentTasks = [...urgentTasks].sort((a, b) => b.count - a.count);
+  const totalUrgentTaskCount = urgentTasks.reduce(
+    (total, task) => total + task.count,
+    0,
+  );
+  const actionableOrderCount =
+    dashboard.orders.pending +
+    dashboard.orders.awaitingPacking +
+    dashboard.orders.returnRequests +
+    dashboard.orders.refundRequests;
 
   const stats = [
     {
-      icon: Banknote,
-      detail: `เฉลี่ย ฿${averageOrderValue.toLocaleString()} / ออเดอร์`,
-      label: "ยอดขายรวม",
-      value: `฿${revenue.toLocaleString()}`,
-    },
-    {
       icon: ShoppingCart,
-      detail: `${waitingSlipOrders.length} รอตรวจสลิป`,
-      label: "ออเดอร์ที่ต้องทำ",
-      value: `${activeOrders.length}`,
+      detail: `${dashboard.orders.pending} รอดำเนินการ · ${dashboard.orders.awaitingPacking} รอแพ็ก · ${dashboard.orders.returnRequests} คืนสินค้า · ${dashboard.orders.refundRequests} คืนเงิน`,
+      label: "ออเดอร์รอดำเนินการ",
+      value: `${actionableOrderCount}`,
     },
     {
       icon: Package,
-      detail: lowStock.length
-        ? `${outOfStock.length} หมดสต็อก`
-        : "ไม่มีสินค้าสต็อกต่ำ",
-      label: "สินค้าใกล้หมด",
-      value: `${lowStock.length}`,
-    },
-    {
-      icon: Tags,
-      detail: `${activeCoupons.length} คูปองเปิดใช้งาน`,
-      label: "โปรโมชั่น",
-      value: `${adminCoupons.length}`,
+      detail: inventoryAttentionDetail(
+        attentionLowStockCount,
+        attentionOutOfStockCount,
+      ),
+      label: "Variant ที่ต้องดูแล",
+      value: `${attentionVariantCount}`,
     },
   ];
 
@@ -176,13 +173,6 @@ export default async function DashboardPage() {
             <ExternalLink />
             เปิดหน้าร้าน
           </a>
-          <Link
-            href="/integrations/zort"
-            className={buttonVariants({ variant: "secondary" })}
-          >
-            <RefreshCw />
-            ซิงก์ ZORT
-          </Link>
           <Link href="/orders" className={buttonVariants()}>
             <ShoppingCart />
             จัดการออเดอร์
@@ -190,7 +180,16 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {error ? (
+        <Alert>
+          <AlertCircle />
+          <AlertTitle>โหลดประวัติ Sync ไม่สำเร็จ</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <DashboardSalesCard key={dashboard.period} dashboard={dashboard} />
         {stats.map((stat, index) => (
           <Card key={stat.label} className={index === 0 ? "border-primary/25" : ""}>
             <CardContent className="flex items-start gap-4 p-5">
@@ -213,15 +212,28 @@ export default async function DashboardPage() {
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
         <div className="space-y-6">
-          <Card>
+          <Card className={cn(totalUrgentTaskCount > 0 && "border-primary/30 shadow-sm")}>
             <CardHeader>
-              <CardTitle>งานที่ต้องทำวันนี้</CardTitle>
-              <CardDescription>รายการที่แอดมินควรจัดการก่อน</CardDescription>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle>งานที่ต้องทำวันนี้</CardTitle>
+                  <CardDescription>
+                    {totalUrgentTaskCount > 0
+                      ? "เข้าหน้านี้แล้วเริ่มจากรายการที่มีตัวเลขก่อน"
+                      : "ตอนนี้ยังไม่มีงานที่ต้องรีบจัดการ"}
+                  </CardDescription>
+                </div>
+                {totalUrgentTaskCount > 0 ? (
+                  <Badge className="h-8 rounded-full bg-primary px-3 text-sm text-primary-foreground">
+                    ต้องทำ {totalUrgentTaskCount.toLocaleString("th-TH")} งาน
+                  </Badge>
+                ) : null}
+              </div>
             </CardHeader>
             <CardContent>
               {urgentTasks.some((task) => task.count > 0) ? (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {urgentTasks.map((task) => (
+                  {sortedUrgentTasks.map((task) => (
                     <TaskRow key={task.label} task={task} />
                   ))}
                 </div>
@@ -229,7 +241,7 @@ export default async function DashboardPage() {
                 <EmptyState
                   icon={<CheckCircle2 className="size-8" />}
                   title="ไม่มีงานเร่งด่วน"
-                  description="ออเดอร์ สต็อก และการซิงก์อยู่ในสถานะปกติ"
+                  description="ออเดอร์ คำขอคืนสินค้า การคืนเงิน สต็อก และการซิงก์อยู่ในสถานะปกติ"
                 />
               )}
             </CardContent>
@@ -257,21 +269,42 @@ export default async function DashboardPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {adminOrders.slice(0, 5).map((order) => (
-                      <TableRow key={order.id}>
-                        <TableCell className="px-4 font-semibold">{order.id}</TableCell>
-                        <TableCell>{order.customer}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {order.payment}
-                        </TableCell>
-                        <TableCell className="font-semibold">
-                          ฿{order.total.toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{order.status}</Badge>
+                    {dashboard.orders.latest.length ? (
+                      dashboard.orders.latest.map((order, index) => (
+                        <TableRow key={latestOrderKey(order, index)}>
+                          <TableCell className="px-4">
+                            <p className="font-semibold">{order.number}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {formatDate(order.orderDate)}
+                            </p>
+                          </TableCell>
+                          <TableCell>{order.customerName || "ไม่ระบุ"}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {paymentStatusLabel(order.paymentStatus)}
+                          </TableCell>
+                          <TableCell className="font-semibold">
+                            {formatMoney(order.amount)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="secondary"
+                              className={orderStatusClass(order.status)}
+                            >
+                              {orderStatusLabel(order.status)}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="px-4 py-10 text-center text-muted-foreground"
+                        >
+                          ยังไม่มีออเดอร์
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -288,12 +321,26 @@ export default async function DashboardPage() {
               </CardAction>
             </CardHeader>
             <CardContent>
-              {productsNeedingAttention.length ? (
+              {attentionProducts.length ? (
                 <div className="space-y-2">
-                  {productsNeedingAttention.slice(0, 5).map((item) => (
-                    <ProductAttentionRow key={item.id} item={item} />
+                  {attentionProducts.map((item, index) => (
+                    <ProductAttentionRow
+                      key={attentionProductKey(item, index)}
+                      item={item}
+                    />
                   ))}
                 </div>
+              ) : attentionVariantCount > 0 ? (
+                <EmptyState
+                  icon={<PackageOpen className="size-8" />}
+                  title={`มี ${attentionVariantCount.toLocaleString("th-TH")} Variant ที่ต้องดูแล`}
+                  description="Dashboard ได้รับยอดรวมแล้ว แต่ยังไม่มีรายละเอียดสินค้าในรายการนี้ ให้ไปหน้าสินค้าเพื่อดู Variant ที่หมดสต็อกหรือใกล้หมด"
+                  action={
+                    <Link href="/products" className={buttonVariants({ size: "sm" })}>
+                      ไปหน้าสินค้า
+                    </Link>
+                  }
+                />
               ) : (
                 <EmptyState
                   icon={<PackageCheck className="size-8" />}
@@ -313,30 +360,43 @@ export default async function DashboardPage() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>การชำระเงินวันนี้</CardTitle>
-              <CardDescription>แยกช่องทางและรายการที่ต้องตรวจ</CardDescription>
+              <CardTitle>สถานะการชำระเงินวันนี้</CardTitle>
+              <CardDescription>
+                Payment Gateway ทั้งหมด {dashboard.payments.total} รายการ
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <PaymentSummary
-                detail="จ่ายผ่านระบบหรือต้องตรวจสลิป"
-                label="PromptPay / Payment Gateway"
-                value={gatewayOrders.length}
+                detail="ระบบยืนยันการชำระเงินแล้ว"
+                label="ชำระสำเร็จ"
+                value={dashboard.payments.paid}
               />
               <PaymentSummary
-                detail="เก็บเงินปลายทาง"
-                label="COD เก็บเงินปลายทาง"
-                value={codOrders.length}
+                detail="กำลังรอผลจาก Payment Gateway"
+                label="รอดำเนินการ"
+                value={dashboard.payments.pending}
               />
-              <PaymentSummary
-                detail="รายการที่ควรตรวจสอบก่อน"
-                label="รอตรวจสลิป"
-                value={waitingSlipOrders.length}
-              />
-              <PaymentSummary
-                detail="ออเดอร์ที่ปิดงานแล้ว"
-                label="สำเร็จแล้ว"
-                value={completedOrders.length}
-              />
+              {dashboard.payments.partialPayment > 0 ? (
+                <PaymentSummary
+                  detail="ยอดชำระยังไม่ครบ"
+                  label="ชำระบางส่วน"
+                  value={dashboard.payments.partialPayment}
+                />
+              ) : null}
+              {dashboard.payments.excessPayment > 0 ? (
+                <PaymentSummary
+                  detail="ยอดชำระมากกว่ายอดออเดอร์"
+                  label="ชำระเกิน"
+                  value={dashboard.payments.excessPayment}
+                />
+              ) : null}
+              {dashboard.payments.voided > 0 ? (
+                <PaymentSummary
+                  detail="รายการชำระเงินที่ถูกยกเลิก"
+                  label="ยกเลิก"
+                  value={dashboard.payments.voided}
+                />
+              ) : null}
             </CardContent>
           </Card>
 
@@ -348,16 +408,22 @@ export default async function DashboardPage() {
                   <CardDescription>ภาพรวมสุขภาพการซิงก์สินค้า</CardDescription>
                 </div>
                 <Badge
-                  variant={syncErrorProducts.length ? "destructive" : pendingSyncProducts.length ? "outline" : "secondary"}
+                  variant={
+                    dashboard.zortSync.failed
+                      ? "destructive"
+                      : dashboard.zortSync.pending
+                        ? "outline"
+                        : "secondary"
+                  }
                   className={cn(
-                    !syncErrorProducts.length &&
-                      !pendingSyncProducts.length &&
+                    !dashboard.zortSync.failed &&
+                      !dashboard.zortSync.pending &&
                       "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
                   )}
                 >
-                  {syncErrorProducts.length
+                  {dashboard.zortSync.failed
                     ? "พบปัญหา"
-                    : pendingSyncProducts.length
+                    : dashboard.zortSync.pending
                       ? "รอซิงก์"
                       : "ปกติ"}
                 </Badge>
@@ -369,27 +435,32 @@ export default async function DashboardPage() {
               </CardAction>
             </CardHeader>
             <CardContent className="space-y-2">
-              <SyncRow label="ซิงก์แล้ว" value={syncedProducts.length} />
-              <SyncRow label="รอซิงก์" value={pendingSyncProducts.length} />
-              <SyncRow label="พบปัญหา" value={syncErrorProducts.length} />
+              <SyncRow label="สำเร็จ" value={dashboard.zortSync.succeeded} />
+              <SyncRow label="กำลังดำเนินการ" value={dashboard.zortSync.pending} />
+              <SyncRow label="พบปัญหา" value={dashboard.zortSync.failed} />
+              <p className="pt-1 text-xs text-muted-foreground">
+                สำเร็จล่าสุด {formatDate(dashboard.zortSync.lastSuccessfulAt)}
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>คูปองและโปรโมชั่น</CardTitle>
-              <CardAction>
-                <Link href="/coupons" className="text-xs text-muted-foreground transition-colors hover:text-foreground">
-                  จัดการคูปอง
-                </Link>
-              </CardAction>
+              <CardTitle>ประวัติ Sync</CardTitle>
+              <CardDescription>การซิงก์สินค้าและออเดอร์ 20 รายการล่าสุด</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {adminCoupons.slice(0, 4).map((coupon) => (
-                  <CouponRow key={coupon.code} coupon={coupon} />
-                ))}
-              </div>
+              {syncRuns.length ? (
+                <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+                  {syncRuns.map((run) => (
+                    <SyncRunRow key={`${run.type}-${run.id}`} run={run} />
+                  ))}
+                </div>
+              ) : (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  ยังไม่มีประวัติ Sync
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -404,15 +475,31 @@ function TaskRow({
   task: {
     action: string;
     count: number;
-    href: string;
+    href?: string;
     icon: ComponentType<{ className?: string }>;
     label: string;
   };
 }) {
+  const needsAction = task.count > 0;
+
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border bg-background px-4 py-3">
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors",
+        needsAction
+          ? "border-primary/25 bg-primary/5"
+          : "bg-background opacity-70",
+      )}
+    >
       <div className="flex min-w-0 items-center gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
+        <span
+          className={cn(
+            "grid size-10 shrink-0 place-items-center rounded-full",
+            needsAction
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
           <task.icon className="size-5" />
         </span>
         <div className="min-w-0">
@@ -421,15 +508,25 @@ function TaskRow({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Badge variant={task.count > 0 ? "default" : "secondary"}>
+        <Badge
+          variant={needsAction ? "default" : "secondary"}
+          className={cn(needsAction && "h-8 min-w-8 rounded-full px-3 text-sm")}
+        >
           {task.count}
         </Badge>
-        <Link
-          href={task.href}
-          className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-        >
-          ไป
-        </Link>
+        {task.href ? (
+          <Link
+            href={task.href}
+            className={cn(
+              "text-xs font-semibold transition-colors",
+              needsAction
+                ? "text-primary hover:text-primary/80"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            ไป
+          </Link>
+        ) : null}
       </div>
     </div>
   );
@@ -458,30 +555,76 @@ function EmptyState({
   );
 }
 
+function latestOrderKey(order: DashboardOrder, index: number) {
+  return [order.id, order.number, order.orderDate ?? "no-date", index].join("-");
+}
+
+function attentionProductKey(item: DashboardAttentionProduct, index: number) {
+  return [
+    item.id,
+    item.variantId ?? "no-variant",
+    item.issue,
+    item.sku ?? "no-sku",
+    item.variantCode ?? "no-code",
+    index,
+  ].join("-");
+}
+
+function countAttentionIssues(products: DashboardAttentionProduct[]) {
+  return products.reduce(
+    (counts, product) => {
+      if (product.issue === "LowStock") {
+        counts.lowStock += 1;
+      }
+      if (product.issue === "OutOfStock") {
+        counts.outOfStock += 1;
+      }
+
+      return counts;
+    },
+    { lowStock: 0, outOfStock: 0 },
+  );
+}
+
 function ProductAttentionRow({
   item,
 }: {
-  item: {
-    id: string;
-    name: string;
-    stock: number;
-    syncStatus: string;
-    zortSku: string;
-  };
+  item: DashboardAttentionProduct;
 }) {
-  const hasSyncError = item.syncStatus === "error";
+  const optionsText = formatProductOptions(item.options);
+  const issue = attentionProductIssue(item.issue);
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border px-4 py-3">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold">{item.name}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {item.zortSku} · คงเหลือ {item.stock} ชิ้น
-        </p>
+    <div className="flex items-center justify-between gap-3 rounded-xl border px-3 py-3 sm:px-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted">
+          {item.imageUrl ? (
+            <Image
+              src={item.imageUrl}
+              alt={item.name}
+              fill
+              className="object-contain p-1"
+              sizes="56px"
+            />
+          ) : (
+            <Package className="size-6 text-muted-foreground" />
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">{item.name}</p>
+          {optionsText ? (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {optionsText}
+            </p>
+          ) : null}
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {item.sku || "ไม่มี SKU"} · คงเหลือ {item.availableStock} ชิ้น
+          </p>
+        </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <Badge variant={hasSyncError || item.stock === 0 ? "destructive" : "outline"}>
-          {hasSyncError ? "Sync ผิดพลาด" : item.stock === 0 ? "หมด" : "ใกล้หมด"}
+        <Badge variant={issue.variant}>
+          {issue.label}
         </Badge>
         <Link
           href={`/products/${item.id}/edit`}
@@ -494,42 +637,75 @@ function ProductAttentionRow({
   );
 }
 
-function CouponRow({
-  coupon,
-}: {
-  coupon: {
-    active: boolean;
-    condition: string;
-    limit: number;
-    name: string;
-    used: number;
+function formatProductOptions(
+  options: DashboardAttentionProduct["options"],
+) {
+  return options
+    .filter((option) => option.name && option.value)
+    .map((option) => `${option.name}: ${option.value}`)
+    .join(" / ");
+}
+
+function attentionProductIssue(issue: DashboardAttentionProduct["issue"]) {
+  const labels: Record<
+    DashboardAttentionProduct["issue"],
+    {
+      label: string;
+      variant: "destructive" | "outline";
+    }
+  > = {
+    LowStock: {
+      label: "ใกล้หมด",
+      variant: "outline",
+    },
+    OutOfStock: {
+      label: "หมด",
+      variant: "destructive",
+    },
+    SyncIssue: {
+      label: "Sync ผิดพลาด / หายจากต้นทาง",
+      variant: "destructive",
+    },
   };
-}) {
-  const progress = coupon.limit
-    ? Math.min(100, Math.round((coupon.used / coupon.limit) * 100))
-    : 0;
+
+  return labels[issue];
+}
+
+function inventoryAttentionDetail(lowStock: number, outOfStock: number) {
+  const details = [
+    lowStock > 0 ? `${lowStock} Variant ใกล้หมด` : "",
+    outOfStock > 0 ? `${outOfStock} Variant หมดสต็อก` : "",
+  ].filter(Boolean);
+
+  return details.length ? details.join(" · ") : "ไม่มี Variant ที่ต้องดูแล";
+}
+
+function SyncRunRow({ run }: { run: DashboardSyncRun }) {
+  const failed =
+    run.status === "Failed" || run.status === "CompletedWithErrors";
+  const running = run.status === "Pending" || run.status === "Running";
 
   return (
     <div className="rounded-xl border px-4 py-3">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{coupon.name}</p>
+        <div>
+          <p className="text-sm font-semibold">
+            {run.type === "Products" ? "สินค้า" : run.type === "Orders" ? "ออเดอร์" : run.type}
+          </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {coupon.condition} · ใช้แล้ว {coupon.used}/{coupon.limit}
+            {formatDate(run.requestedAtUtc)} · ดึง {run.totalFetched} รายการ
           </p>
         </div>
-        <Badge
-          variant={coupon.active ? "default" : "secondary"}
-          className={cn(
-            coupon.active && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
-          )}
-        >
-          {coupon.active ? "เปิดอยู่" : "ปิด"}
+        <Badge variant={failed ? "destructive" : running ? "outline" : "secondary"}>
+          {syncStatusLabel(run.status)}
         </Badge>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
-      </div>
+      {run.failed > 0 ? (
+        <p className="mt-2 text-xs text-destructive">
+          ไม่สำเร็จ {run.failed} รายการ
+          {run.errors[0] ? ` · ${run.errors[0]}` : ""}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -561,4 +737,126 @@ function SyncRow({ label, value }: { label: string; value: number }) {
       <Badge variant="secondary">{value} รายการ</Badge>
     </div>
   );
+}
+
+function parseSalesPeriod(
+  value: string | string[] | undefined,
+): DashboardPeriod {
+  const period = Array.isArray(value) ? value[0] : value;
+
+  if (period === "month" || period === "year") {
+    return period;
+  }
+
+  return "day";
+}
+
+function formatMoney(value: number) {
+  return value.toLocaleString("th-TH", {
+    style: "currency",
+    currency: "THB",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatDate(value: string | null) {
+  if (!value) {
+    return "ยังไม่มีข้อมูล";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("th-TH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Bangkok",
+  }).format(date);
+}
+
+function paymentStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    ExcessPayment: "ชำระเกิน",
+    Paid: "ชำระแล้ว",
+    PartialPayment: "ชำระบางส่วน",
+    Pending: "รอดำเนินการ",
+    Voided: "ยกเลิก",
+  };
+
+  return labels[status] ?? status;
+}
+
+function orderStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    Completed: "สำเร็จ",
+    Pending: "รอดำเนินการ",
+    Returned: "ตีกลับ",
+    Sent: "จัดส่งแล้ว",
+    Voided: "ยกเลิก",
+    Waiting: "รอแพ็ก",
+  };
+
+  return labels[status] ?? status;
+}
+
+function orderStatusClass(status: string) {
+  const normalized = status.trim().toLowerCase();
+
+  if (
+    normalized === "completed" ||
+    normalized === "success" ||
+    normalized.includes("สำเร็จ")
+  ) {
+    return "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300";
+  }
+
+  if (
+    normalized === "voided" ||
+    normalized === "cancelled" ||
+    normalized === "canceled" ||
+    normalized.includes("ยกเลิก")
+  ) {
+    return "bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300";
+  }
+
+  if (
+    normalized === "waiting" ||
+    normalized === "packed" ||
+    normalized.includes("แพ็ก")
+  ) {
+    return "bg-sky-100 text-sky-700 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300";
+  }
+
+  if (
+    normalized === "sent" ||
+    normalized === "shipped" ||
+    normalized.includes("จัดส่ง")
+  ) {
+    return "bg-indigo-100 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300";
+  }
+
+  if (normalized === "returned" || normalized.includes("ตีกลับ")) {
+    return "bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-300";
+  }
+
+  if (normalized === "pending" || normalized.includes("รอดำเนินการ")) {
+    return "bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300";
+  }
+
+  return "bg-muted text-muted-foreground hover:bg-muted";
+}
+
+function syncStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    CompletedWithErrors: "สำเร็จบางส่วน",
+    Failed: "ไม่สำเร็จ",
+    Pending: "รอดำเนินการ",
+    Running: "กำลังซิงก์",
+    Succeeded: "สำเร็จ",
+  };
+
+  return labels[status] ?? status;
 }

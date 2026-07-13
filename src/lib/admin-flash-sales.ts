@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { PonPonApiError, ponponApiJson } from "@/lib/ponpon-api";
 
-export type FlashSaleStatus = "upcoming" | "active" | "ended";
+export type FlashSaleStatus = "upcoming" | "active" | "inactive" | "ended";
 
 export type FlashSaleProduct = {
   productId: string;
@@ -9,6 +9,8 @@ export type FlashSaleProduct = {
   productName: string;
   originalPrice: number;
   imageUrl: string;
+  quantityLimit: number | null;
+  reservedQuantity: number;
 };
 
 export type FlashSale = {
@@ -17,6 +19,7 @@ export type FlashSale = {
   startDate: string;
   endDate: string;
   slots: string[];
+  isActive: boolean;
   status: FlashSaleStatus;
   products: FlashSaleProduct[];
 };

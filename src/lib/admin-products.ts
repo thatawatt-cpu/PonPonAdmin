@@ -31,6 +31,7 @@ export type ProductOption = { name: string; value: string };
 
 export type AdminProduct = {
   id: string;
+  parentProductId: string | null;
   zortProductId: string;
   zortSku: string;
   baseSku: string;
@@ -59,6 +60,13 @@ export type AdminProduct = {
   isOnHomepage: boolean;
   slug: string | null;
   originalPrice: number | null;
+  displayPrice: number;
+  displayOriginalPrice: number | null;
+  priceSource: "base" | "flash_sale";
+  activeFlashSaleId: string | null;
+  badges: string[];
+  rating: number | null;
+  reviewCount: number;
   promotionBadge: string | null;
   highlights: string | null;
   richDescription: string | null;
@@ -86,6 +94,13 @@ type ApiProductVariant = {
   variantCode?: string | null;
   barcode?: string | null;
   sellPrice?: number | null;
+  displayPrice?: number | null;
+  displayOriginalPrice?: number | null;
+  priceSource?: "base" | "flash_sale" | null;
+  activeFlashSaleId?: string | null;
+  badges?: string[] | null;
+  rating?: number | null;
+  reviewCount?: number | null;
   stock?: number | null;
   availableStock?: number | null;
   unitText?: string | null;
@@ -119,6 +134,13 @@ type ApiAdminProduct = {
   isOnHomepage?: boolean | null;
   slug?: string | null;
   originalPrice?: number | null;
+  displayPrice?: number | null;
+  displayOriginalPrice?: number | null;
+  priceSource?: "base" | "flash_sale" | null;
+  activeFlashSaleId?: string | null;
+  badges?: string[] | null;
+  rating?: number | null;
+  reviewCount?: number | null;
   promotionBadge?: string | null;
   highlights?: string | null;
   richDescription?: string | null;
@@ -173,8 +195,8 @@ export async function getAdminProducts(): Promise<ProductResult> {
 
     return {
       authRequired: false,
-      products: products.map((product) =>
-        mapApiProduct(product, categoriesByZortId),
+      products: products.flatMap((product) =>
+        mapApiProductListItem(product, categoriesByZortId),
       ),
       source: "api",
     };
@@ -196,9 +218,10 @@ export async function getAdminProducts(): Promise<ProductResult> {
 
         return {
           ...product,
+          parentProductId: null,
           baseSku: getSkuGroup(product.zortSku, product.id),
           zortCategoryId: "-",
-          isVisibleOnLiff: status !== "soldout",
+          isVisibleOnLiff: false,
           status,
           availableStock: product.stock,
           options: [],
@@ -213,6 +236,13 @@ export async function getAdminProducts(): Promise<ProductResult> {
           isOnHomepage: false,
           slug: null,
           originalPrice: null,
+          displayPrice: product.price,
+          displayOriginalPrice: null,
+          priceSource: "base" as const,
+          activeFlashSaleId: null,
+          badges: [],
+          rating: null,
+          reviewCount: 0,
           promotionBadge: null,
           highlights: null,
           richDescription: null,
@@ -272,9 +302,10 @@ export async function getAdminProduct(id: string) {
       product: fallbackProduct
         ? {
             ...fallbackProduct,
+            parentProductId: null,
             baseSku: getSkuGroup(fallbackProduct.zortSku, fallbackProduct.id),
             zortCategoryId: "-",
-            isVisibleOnLiff: fallbackProduct.status !== "soldout",
+            isVisibleOnLiff: false,
             status: toProductStatus(fallbackProduct.status),
             availableStock: fallbackProduct.stock,
             options: [],
@@ -289,6 +320,13 @@ export async function getAdminProduct(id: string) {
             isOnHomepage: false,
             slug: null,
             originalPrice: null,
+            displayPrice: fallbackProduct.price,
+            displayOriginalPrice: null,
+            priceSource: "base" as const,
+            activeFlashSaleId: null,
+            badges: [],
+            rating: null,
+            reviewCount: 0,
             promotionBadge: null,
             highlights: null,
             richDescription: null,
@@ -401,6 +439,7 @@ function mapApiProduct(
 
   return {
     id: product.id,
+    parentProductId: null,
     zortProductId: String(product.zortProductId ?? "-"),
     zortSku: product.sku ?? "-",
     baseSku: product.baseSku ?? getSkuGroup(product.sku ?? product.id, product.id),
@@ -429,11 +468,30 @@ function mapApiProduct(
     isOnHomepage: product.isOnHomepage ?? false,
     slug: product.slug ?? null,
     originalPrice: product.originalPrice ?? null,
+    displayPrice: product.displayPrice ?? product.sellPrice ?? 0,
+    displayOriginalPrice: product.displayOriginalPrice ?? null,
+    priceSource: product.priceSource ?? "base",
+    activeFlashSaleId: product.activeFlashSaleId ?? null,
+    badges: product.badges?.filter((badge): badge is string => typeof badge === "string") ?? [],
+    rating: product.rating ?? null,
+    reviewCount: product.reviewCount ?? 0,
     promotionBadge: product.promotionBadge ?? null,
     highlights: product.highlights ?? null,
     richDescription: product.richDescription ?? null,
     images: product.images ?? [],
   };
+}
+
+function mapApiProductListItem(
+  product: ApiAdminProduct,
+  categoriesByZortId: Map<string, string>,
+): AdminProduct[] {
+  const mapped = mapApiProduct(product, categoriesByZortId);
+  const variants = (product.variants ?? []).map((variant) =>
+    mapApiVariant(variant, mapped),
+  );
+
+  return variants.length ? variants : [mapped];
 }
 
 function mapApiVariant(
@@ -446,6 +504,7 @@ function mapApiVariant(
 
   return {
     id: variant.id,
+    parentProductId: parent.id,
     zortProductId: String(variant.zortProductId ?? "-"),
     zortSku: variant.sku ?? "-",
     baseSku: parent.baseSku,
@@ -478,6 +537,13 @@ function mapApiVariant(
     isOnHomepage: false,
     slug: null,
     originalPrice: null,
+    displayPrice: variant.displayPrice ?? variant.sellPrice ?? 0,
+    displayOriginalPrice: variant.displayOriginalPrice ?? null,
+    priceSource: variant.priceSource ?? "base",
+    activeFlashSaleId: variant.activeFlashSaleId ?? null,
+    badges: variant.badges?.filter((badge): badge is string => typeof badge === "string") ?? parent.badges,
+    rating: variant.rating ?? parent.rating,
+    reviewCount: variant.reviewCount ?? parent.reviewCount,
     promotionBadge: null,
     highlights: null,
     richDescription: null,

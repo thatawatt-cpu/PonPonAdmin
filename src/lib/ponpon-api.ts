@@ -1,8 +1,9 @@
-import { request } from "node:https";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { URL } from "node:url";
 
 export const PONPON_API_BASE_URL =
-  process.env.PONPON_API_BASE_URL ?? "https://127.0.0.1:7005";
+  process.env.PONPON_API_BASE_URL ?? "http://localhost:5111";
 
 type ApiRequestOptions = {
   method?: string;
@@ -61,6 +62,7 @@ export async function ponponApiRaw(
   }
 
   return new Promise((resolve, reject) => {
+    const request = url.protocol === "http:" ? httpRequest : httpsRequest;
     const req = request(
       url,
       {

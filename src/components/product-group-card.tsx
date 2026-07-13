@@ -19,9 +19,20 @@ function getGroupName(name: string) {
 
 export function ProductGroupCard({ group }: { group: ProductGroup }) {
   const primary = group.products[0];
-  const variantImages = primary.variantImages;
+  const variantImages = primary.variantImages.length
+    ? primary.variantImages
+    : Array.from(
+        new Set(
+          group.products
+            .map((product) => product.image)
+            .filter((image) => image && !image.includes("/images/products/cookies.png")),
+        ),
+      );
   const isVariantGroup = variantImages.length > 1;
-  const totalStock = primary.stock;
+  const totalStock = group.products.reduce(
+    (sum, product) => sum + product.stock,
+    0,
+  );
   const totalSold = group.products.reduce((sum, p) => sum + p.sold, 0);
   const prices = group.products.map((p) => p.price);
   const minPrice = Math.min(...prices);
@@ -114,7 +125,7 @@ export function ProductGroupCard({ group }: { group: ProductGroup }) {
               ขายแล้ว {totalSold.toLocaleString()} ชิ้น
             </p>
           </div>
-          <Link href={`/products/${primary.id}/edit`} className={buttonVariants({ size: "sm" })}>
+          <Link href={`/products/${primary.parentProductId ?? primary.id}/edit`} className={buttonVariants({ size: "sm" })}>
             <Settings className="size-3.5" />
             {isVariantGroup ? "จัดการ" : "แก้ไข"}
           </Link>

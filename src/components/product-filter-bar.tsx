@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,6 +19,12 @@ export function ProductFilterBar({
   const router = useRouter();
   const searchParams = useSearchParams();
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [searchValue, setSearchValue] = useState(searchParams.get("q") ?? "");
+
+  // Sync input when URL changes externally (pagination, browser back/forward)
+  useEffect(() => {
+    setSearchValue(searchParams.get("q") ?? "");
+  }, [searchParams]);
 
   function pushParams(overrides: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -34,6 +40,7 @@ export function ProductFilterBar({
   }
 
   function handleSearch(value: string) {
+    setSearchValue(value);
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => pushParams({ q: value }), 350);
   }
@@ -43,7 +50,7 @@ export function ProductFilterBar({
       <Input
         placeholder="ค้นหาชื่อสินค้า หรือ SKU"
         className="flex-1"
-        defaultValue={searchParams.get("q") ?? ""}
+        value={searchValue}
         onChange={(e) => handleSearch(e.target.value)}
       />
       <Select

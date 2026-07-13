@@ -3,14 +3,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  AlertCircle,
   CalendarDays,
   Check,
   CheckCircle2,
   Circle,
   ClipboardList,
   Clock,
+  Lock,
   Plus,
   Save,
   Send,
@@ -18,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import type { AdminProduct } from "@/lib/admin-products";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -28,6 +31,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { StickyActionHeader } from "@/components/sticky-action-header";
 import { cn } from "@/lib/utils";
 
 type FlashProduct = {
@@ -37,9 +48,47 @@ type FlashProduct = {
   originalPrice: number;
   salePrice: number;
   zortSku: string;
+  quantityLimit: number | null;
+  reservedQuantity: number;
 };
 
-const PRESET_SLOTS = ["09:00", "12:00", "15:00", "18:00", "21:00"];
+const LEGACY_SLOT_OPTIONS = [
+  { start: "09:00", range: "09:00-12:00" },
+  { start: "12:00", range: "12:00-15:00" },
+  { start: "15:00", range: "15:00-18:00" },
+  { start: "18:00", range: "18:00-21:00" },
+  { start: "21:00", range: "21:00-23:59" },
+] as const;
+
+const FLASH_SALE_TIMEZONE = "Asia/Bangkok (UTC+7)";
+const SLOT_RANGE_PATTERN = /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/;
+const TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => {
+  const hour = String(Math.floor(index / 4)).padStart(2, "0");
+  const minute = String((index % 4) * 15).padStart(2, "0");
+  return `${hour}:${minute}`;
+});
+
+type SlotFeedback = {
+  tone: "error" | "success";
+  text: string;
+};
+
+function normalizeSlot(slot: string) {
+  const preset = LEGACY_SLOT_OPTIONS.find(
+    (item) => item.start === slot || item.range === slot,
+  );
+  return preset?.range ?? slot;
+}
+
+function sortSlots(slots: string[]) {
+  return [...new Set(slots)].sort();
+}
+
+function isValidSlotRange(slot: string) {
+  if (!SLOT_RANGE_PATTERN.test(slot)) return false;
+  const [start, end] = slot.split("-");
+  return start < end;
+}
 
 function getGroupName(name: string) {
   return name.replace(/\s*\(สี[^)]*\)\s*$/u, "").trim();
@@ -50,6 +99,7 @@ export type FlashSaleInitialData = {
   name: string;
   startDate: string;
   endDate: string;
+  isActive: boolean;
   slots: string[];
   products: FlashProduct[];
 };
@@ -66,17 +116,21 @@ export function FlashSaleEditor({
   const [name, setName] = useState(initialData?.name ?? "");
   const [startDate, setStartDate] = useState(initialData?.startDate ?? "");
   const [endDate, setEndDate] = useState(initialData?.endDate ?? "");
+  const [isActive, setIsActive] = useState(initialData?.isActive ?? false);
   const [slots, setSlots] = useState<string[]>(
-    initialData?.slots ?? ["09:00", "12:00", "15:00"],
+    initialData?.slots ? sortSlots(initialData.slots.map(normalizeSlot)) : [],
   );
-  const [customSlot, setCustomSlot] = useState("");
+  const [slotStart, setSlotStart] = useState("");
+  const [slotEnd, setSlotEnd] = useState("");
+  const [slotFeedback, setSlotFeedback] = useState<SlotFeedback | null>(null);
   const [selectedProducts, setSelectedProducts] = useState<FlashProduct[]>(
     initialData?.products ?? [],
   );
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [savingMode, setSavingMode] = useState<"draft" | "publish" | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const errorRef = useRef<HTMLDivElement>(null);
 
   const selectedIds = useMemo(
     () => new Set(selectedProducts.map((product) => product.id)),
@@ -86,20 +140,61 @@ export function FlashSaleEditor({
   const hasSlots = slots.length > 0;
   const hasProducts = selectedProducts.length > 0;
   const selectedSlotText = slots.length ? slots.join(", ") : "-";
+  const hasReservedQuota = selectedProducts.some(
+    (product) => (product.reservedQuantity ?? 0) > 0,
+  );
+  const locked = isEdit && hasReservedQuota;
+
+  function showError(message: string) {
+    setError(message);
+    window.requestAnimationFrame(() => {
+      errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      errorRef.current?.focus({ preventScroll: true });
+    });
+  }
 
   function toggleSlot(slot: string) {
     setSlots((prev) =>
       prev.includes(slot)
         ? prev.filter((item) => item !== slot)
-        : [...prev, slot].sort(),
+        : sortSlots([...prev, slot]),
     );
+    setSlotFeedback(null);
   }
 
   function addCustomSlot() {
-    const trimmed = customSlot.trim();
-    if (!trimmed || slots.includes(trimmed)) return;
-    setSlots((prev) => [...prev, trimmed].sort());
-    setCustomSlot("");
+    if (!slotStart || !slotEnd) {
+      setSlotFeedback({
+        tone: "error",
+        text: "เลือกเวลาเริ่มและเวลาสิ้นสุดก่อนเพิ่มช่วงเวลา",
+      });
+      return;
+    }
+
+    const nextSlot = `${slotStart}-${slotEnd}`;
+    if (!isValidSlotRange(nextSlot)) {
+      setSlotFeedback({
+        tone: "error",
+        text: "เวลาสิ้นสุดต้องมากกว่าเวลาเริ่ม เช่น 10:00-11:30",
+      });
+      return;
+    }
+    if (slots.includes(nextSlot)) {
+      setSlotFeedback({
+        tone: "error",
+        text: `ช่วงเวลา ${nextSlot} ถูกเพิ่มไว้แล้ว`,
+      });
+      return;
+    }
+
+    setSlots((prev) => sortSlots([...prev, nextSlot]));
+    setSlotStart("");
+    setSlotEnd("");
+    setSlotFeedback({
+      tone: "success",
+      text: `เพิ่มช่วงเวลา ${nextSlot} แล้ว`,
+    });
+    setError("");
   }
 
   function toggleProduct(product: AdminProduct) {
@@ -115,6 +210,8 @@ export function FlashSaleEditor({
           originalPrice: product.price,
           salePrice: Math.round(product.price * 0.85),
           zortSku: product.zortSku,
+          quantityLimit: null,
+          reservedQuantity: 0,
         },
       ]);
     }
@@ -128,43 +225,57 @@ export function FlashSaleEditor({
     );
   }
 
+  function updateQuantityLimit(id: string, limit: number | null) {
+    setSelectedProducts((prev) =>
+      prev.map((product) =>
+        product.id === id ? { ...product, quantityLimit: limit } : product,
+      ),
+    );
+  }
+
   function removeProduct(id: string) {
     setSelectedProducts((prev) => prev.filter((product) => product.id !== id));
   }
 
-  async function save() {
+  async function save(nextIsActive: boolean) {
+    if (locked) {
+      showError("ไม่สามารถแก้ไข Flash Sale นี้ได้ เนื่องจากมีออเดอร์จองโควตาอยู่");
+      return;
+    }
     if (!name.trim()) {
-      setError("กรอกชื่อ Flash Sale ก่อน");
+      showError("กรอกชื่อ Flash Sale ก่อน");
       return;
     }
     if (!startDate) {
-      setError("เลือกวันเริ่มต้นก่อน");
+      showError("เลือกวันเริ่มต้นก่อน");
       return;
     }
     if (!endDate) {
-      setError("เลือกวันสิ้นสุดก่อน");
+      showError("เลือกวันสิ้นสุดก่อน");
       return;
     }
     if (slots.length === 0) {
-      setError("เพิ่ม time slot อย่างน้อย 1 อัน");
+      showError("เพิ่ม time slot อย่างน้อย 1 อัน");
       return;
     }
-    if (selectedProducts.length === 0) {
-      setError("เลือกสินค้าอย่างน้อย 1 ชิ้น");
+    if (slots.some((slot) => !isValidSlotRange(slot))) {
+      showError("ช่วงเวลา Flash Sale ต้องเป็นรูปแบบ HH:mm-HH:mm เช่น 09:00-12:00");
       return;
     }
     setError("");
-    setSaving(true);
+    setSavingMode(nextIsActive ? "publish" : "draft");
 
     try {
       const body = {
         name,
         startDate,
         endDate,
+        isActive: nextIsActive,
         slots,
         products: selectedProducts.map((product) => ({
           productId: product.id,
           salePrice: product.salePrice,
+          quantityLimit: product.quantityLimit,
         })),
       };
 
@@ -178,6 +289,7 @@ export function FlashSaleEditor({
           },
         );
         if (!res.ok) throw new Error("บันทึกไม่สำเร็จ");
+        setIsActive(nextIsActive);
         setSaved(true);
         setTimeout(() => setSaved(false), 1800);
       } else {
@@ -190,55 +302,69 @@ export function FlashSaleEditor({
         router.push("/flash-sale");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
+      showError(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
     } finally {
-      setSaving(false);
+      setSavingMode(null);
     }
   }
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-muted-foreground">
-            Flash Sale
-          </p>
-          <h1 className="mt-1 text-3xl font-black tracking-tight sm:text-4xl">
-            {isEdit ? "แก้ไข Flash Sale" : "สร้าง Flash Sale ใหม่"}
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
-            สร้างแคมเปญ Flash Sale พร้อมกำหนดเวลาและเลือกสินค้าราคาพิเศษ
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href="/flash-sale"
-            className={buttonVariants({ variant: "outline", size: "lg" })}
-          >
-            ยกเลิก
-          </Link>
-          <Button size="lg" onClick={save} disabled={saving || saved}>
-            {saving ? (
-              <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            ) : (
-              <Save />
-            )}
-            {saving
-              ? "กำลังบันทึก..."
-              : saved
-                ? "บันทึกแล้ว"
-                : isEdit
-                  ? "บันทึกการแก้ไข"
-                  : "บันทึก Flash Sale"}
-          </Button>
-        </div>
-      </header>
+      <StickyActionHeader
+        eyebrow="Flash Sale"
+        title={isEdit ? "แก้ไข Flash Sale" : "สร้าง Flash Sale ใหม่"}
+        description="สร้างแคมเปญ Flash Sale พร้อมกำหนดเวลาและเลือกสินค้าราคาพิเศษ"
+        feedback={locked ? "Flash Sale นี้มีออเดอร์จองโควตาอยู่แล้ว" : undefined}
+        actions={
+          <>
+            <Link
+              href="/flash-sale"
+              className={buttonVariants({ variant: "outline", size: "lg" })}
+            >
+              ยกเลิก
+            </Link>
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={() => save(false)}
+              disabled={!!savingMode || saved || locked}
+            >
+              {savingMode === "draft" ? <SpinnerIcon /> : <Save />}
+              {savingMode === "draft" ? "Saving..." : "Save Draft"}
+            </Button>
+            <Button
+              size="lg"
+              onClick={() => save(true)}
+              disabled={!!savingMode || saved || locked}
+            >
+              {savingMode === "publish" ? <SpinnerIcon /> : <Send />}
+              {savingMode === "publish" ? "Publishing..." : "Publish"}
+            </Button>
+          </>
+        }
+      />
 
       {error ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-medium text-destructive">
-          {error}
+        <div
+          ref={errorRef}
+          tabIndex={-1}
+          className="sticky top-3 z-30 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-semibold text-destructive shadow-lg outline-none ring-background focus-visible:ring-2"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          <div>
+            <p className="font-black">บันทึกไม่ได้</p>
+            <p className="mt-0.5 font-medium">{error}</p>
+          </div>
         </div>
+      ) : null}
+
+      {locked ? (
+        <Alert variant="destructive">
+          <Lock />
+          <AlertDescription>
+            Flash Sale นี้มีออเดอร์จองโควตาสินค้าอยู่แล้ว จึงไม่สามารถแก้ไขหรือลบได้
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -255,6 +381,7 @@ export function FlashSaleEditor({
                   onChange={(event) => setName(event.target.value)}
                   placeholder="เช่น Flash Sale สุดสัปดาห์"
                   className="h-11"
+                  disabled={locked}
                 />
               </Field>
 
@@ -265,6 +392,7 @@ export function FlashSaleEditor({
                     value={startDate}
                     onChange={(event) => setStartDate(event.target.value)}
                     className="h-11"
+                    disabled={locked}
                   />
                 </Field>
                 <Field label="วันสิ้นสุด">
@@ -274,6 +402,7 @@ export function FlashSaleEditor({
                     min={startDate}
                     onChange={(event) => setEndDate(event.target.value)}
                     className="h-11"
+                    disabled={locked}
                   />
                 </Field>
               </div>
@@ -283,87 +412,135 @@ export function FlashSaleEditor({
           <StepCard
             step="2"
             title="Time Slots"
-            description="กำหนดช่วงเวลาที่ Flash Sale จะเปิดในแต่ละวัน"
+            description={`กำหนดช่วงเวลาที่ Flash Sale จะเปิดในแต่ละวัน ตามเวลา ${FLASH_SALE_TIMEZONE}`}
             icon={<Clock />}
           >
-            <div className="flex flex-wrap gap-3">
-              {PRESET_SLOTS.map((slot) => {
-                const selected = slots.includes(slot);
-                return (
-                  <button
-                    key={slot}
-                    type="button"
-                    onClick={() => toggleSlot(slot)}
-                    className={cn(
-                      "inline-flex h-9 min-w-24 items-center justify-between gap-3 rounded-lg border px-3 text-sm font-black transition",
-                      selected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background text-foreground hover:bg-muted",
-                    )}
-                  >
-                    {slot}
-                    <span
-                      className={cn(
-                        "grid size-5 place-items-center rounded-full",
-                        selected ? "bg-white text-primary" : "bg-muted",
-                      )}
+            <div className="rounded-xl border bg-muted/10 p-4">
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                <label className="block space-y-2">
+                  <span className="text-xs font-semibold text-foreground">เวลาเริ่ม</span>
+                  <div className="relative">
+                    <Clock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Select
+                      value={slotStart}
+                      onValueChange={(value) => {
+                        setSlotStart(value ?? "");
+                        setSlotFeedback(null);
+                      }}
+                      disabled={locked}
                     >
-                      {selected ? <Check className="size-3" /> : <Plus className="size-3" />}
-                    </span>
-                  </button>
-                );
-              })}
+                      <SelectTrigger className="h-10 w-full pl-9">
+                        <SelectValue placeholder="เลือกเวลาเริ่ม" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {TIME_OPTIONS.map((time) => (
+                          <SelectItem key={time} value={time}>
+                            {time}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-xs font-semibold text-foreground">เวลาสิ้นสุด</span>
+                  <div className="relative">
+                    <Clock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Select
+                      value={slotEnd}
+                      onValueChange={(value) => {
+                        setSlotEnd(value ?? "");
+                        setSlotFeedback(null);
+                      }}
+                      disabled={locked}
+                    >
+                      <SelectTrigger className="h-10 w-full pl-9">
+                        <SelectValue placeholder="เลือกเวลาสิ้นสุด" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {TIME_OPTIONS.map((time) => (
+                          <SelectItem key={time} value={time}>
+                            {time}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </label>
+                <Button
+                  type="button"
+                  onClick={addCustomSlot}
+                  disabled={locked}
+                  className="self-end"
+                >
+                  <Plus />
+                  เพิ่มช่วงเวลา
+                </Button>
+              </div>
+
+              {slotFeedback ? (
+                <div
+                  className={cn(
+                    "mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold",
+                    slotFeedback.tone === "error"
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700",
+                  )}
+                >
+                  {slotFeedback.tone === "error" ? (
+                    <AlertCircle className="size-4 shrink-0" />
+                  ) : (
+                    <CheckCircle2 className="size-4 shrink-0" />
+                  )}
+                  <span>{slotFeedback.text}</span>
+                </div>
+              ) : null}
             </div>
 
-            {slots.filter((slot) => !PRESET_SLOTS.includes(slot)).length ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {slots
-                  .filter((slot) => !PRESET_SLOTS.includes(slot))
-                  .map((slot) => (
+            <div className="mt-4 rounded-xl border bg-background p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-black text-foreground">ช่วงเวลาที่เลือก</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    ระบบจะส่งค่าเป็นรูปแบบ HH:mm-HH:mm
+                  </p>
+                </div>
+                {slots.length ? (
+                  <Badge variant="secondary">{slots.length} ช่วงเวลา</Badge>
+                ) : null}
+              </div>
+
+              {slots.length ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {slots.map((slot) => (
                     <span
                       key={slot}
-                      className="inline-flex h-8 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 text-sm font-semibold text-emerald-700"
                     >
                       {slot}
                       <button
                         type="button"
+                        aria-label={`ลบช่วงเวลา ${slot}`}
                         onClick={() => toggleSlot(slot)}
-                        className="grid size-5 place-items-center rounded-full bg-white/20 hover:bg-white/30"
+                        disabled={locked}
+                        className="grid size-5 place-items-center rounded-full border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <X className="size-3" />
                       </button>
                     </span>
                   ))}
-              </div>
-            ) : null}
-
-            <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <div className="relative">
-                <Clock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="time"
-                  value={customSlot}
-                  onChange={(event) => setCustomSlot(event.target.value)}
-                  className="h-10 pl-9"
-                />
-              </div>
-              <Button type="button" variant="outline" onClick={addCustomSlot}>
-                <Plus />
-                เพิ่มช่วงเวลา
-              </Button>
+                </div>
+              ) : (
+                <div className="mt-3 rounded-lg border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                  ยังไม่มีช่วงเวลา เลือกเวลาเริ่มและเวลาสิ้นสุดแล้วกดเพิ่มช่วงเวลา
+                </div>
+              )}
             </div>
-
-            {slots.length ? (
-              <p className="mt-3 flex items-center gap-2 text-xs text-emerald-600">
-                <CheckCircle2 className="size-4" />
-                เลือกแล้ว {slots.length} ช่วงเวลา: {selectedSlotText}
-              </p>
-            ) : null}
           </StepCard>
 
           <StepCard
             step="3"
-            title="สินค้าในแฟลชเซล"
+            title="Flash Sale Products"
             description="เลือกสินค้าและตั้งราคาพิเศษสำหรับแต่ละช่วงเวลา"
             icon={<ShoppingBag />}
           >
@@ -373,25 +550,28 @@ export function FlashSaleEditor({
                   variant="outline"
                   onClick={() => setPickerOpen(true)}
                   className="border-dashed"
+                  disabled={locked}
                 >
                   <Plus />
                   เลือกสินค้า
                 </Button>
 
                 <div className="mt-4 overflow-x-auto rounded-xl border">
-                  <table className="w-full min-w-[720px] text-left text-sm">
+                  <table className="w-full min-w-[820px] text-left text-sm">
                     <thead className="bg-muted text-xs font-semibold text-muted-foreground">
                       <tr>
                         <th className="px-4 py-3">สินค้า</th>
                         <th className="px-4 py-3">ราคาปกติ</th>
                         <th className="px-4 py-3">ราคา Flash Sale</th>
                         <th className="px-4 py-3">ส่วนลด</th>
+                        <th className="px-4 py-3">โควตา</th>
                         <th className="px-4 py-3"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                       {selectedProducts.map((product) => {
                         const discount = getDiscount(product);
+                        const productLocked = locked || product.reservedQuantity > 0;
                         return (
                           <tr key={product.id}>
                             <td className="px-4 py-3">
@@ -433,11 +613,37 @@ export function FlashSaleEditor({
                                     )
                                   }
                                   className="h-9 w-28 font-semibold"
+                                  disabled={productLocked}
                                 />
                               </div>
                             </td>
                             <td className="px-4 py-3">
                               <Badge variant="destructive">-{discount}%</Badge>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="space-y-1">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={product.quantityLimit ?? ""}
+                                  placeholder="ไม่จำกัด"
+                                  onChange={(event) =>
+                                    updateQuantityLimit(
+                                      product.id,
+                                      event.target.value === ""
+                                        ? null
+                                        : Number(event.target.value),
+                                    )
+                                  }
+                                  className="h-9 w-24 font-semibold"
+                                  disabled={productLocked}
+                                />
+                                {product.reservedQuantity > 0 ? (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    จองแล้ว {product.reservedQuantity}
+                                  </Badge>
+                                ) : null}
+                              </div>
                             </td>
                             <td className="px-4 py-3 text-right">
                               <Button
@@ -446,6 +652,7 @@ export function FlashSaleEditor({
                                 size="sm"
                                 onClick={() => removeProduct(product.id)}
                                 className="text-muted-foreground hover:text-destructive"
+                                disabled={productLocked}
                               >
                                 ลบ
                               </Button>
@@ -504,6 +711,8 @@ export function FlashSaleEditor({
                 }
               />
               <SummaryRow label="Time Slots" value={selectedSlotText} />
+              <SummaryRow label="Timezone" value={FLASH_SALE_TIMEZONE} />
+              <SummaryRow label="สถานะ" value={isActive ? "เปิดใช้งาน" : "ปิดใช้งาน"} />
               <SummaryRow
                 label="จำนวนสินค้า"
                 value={`${selectedProducts.length} รายการ`}
@@ -522,13 +731,15 @@ export function FlashSaleEditor({
             <CardContent>
               <div className="rounded-xl border bg-background p-4">
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary">Draft</Badge>
+                  <ActiveStatusBadge isActive={isActive} />
                   <span className="text-xs text-muted-foreground">
-                    ยังไม่พร้อมเผยแพร่
+                    {isActive ? "เปิดใช้งาน" : "ปิดใช้งาน"}
                   </span>
                 </div>
                 <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                  บันทึกแบบร่างไว้ก่อน คุณค่อยเผยแพร่ภายหลังได้
+                  {isActive
+                    ? "แสดงบนหน้า shop และใช้คำนวณราคาตามช่วงเวลาที่ตั้งไว้"
+                    : "ยังไม่แสดงบนหน้า shop และยังไม่ถูกใช้คำนวณราคา"}
                 </p>
                 <div className="mt-4 space-y-3 border-t pt-4">
                   <ChecklistItem done={hasBasics}>
@@ -707,6 +918,18 @@ function Field({
       <span className="text-xs font-semibold text-foreground">{label}</span>
       {children}
     </label>
+  );
+}
+
+function SpinnerIcon() {
+  return <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />;
+}
+
+function ActiveStatusBadge({ isActive }: { isActive: boolean }) {
+  return (
+    <Badge variant={isActive ? "default" : "outline"}>
+      {isActive ? "เปิดใช้งาน" : "ปิดใช้งาน"}
+    </Badge>
   );
 }
 

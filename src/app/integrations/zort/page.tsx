@@ -149,7 +149,7 @@ function ProductRow({ product }: { product: AdminProduct }) {
       <td className="px-4 py-4 font-black">฿{product.price.toLocaleString()}</td>
       <td className="px-4 py-4 text-muted-foreground">{product.stock}</td>
       <td className="px-4 py-4">
-        <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${
+        <span className={`inline-flex h-7 items-center rounded-full px-3 text-xs font-black ${
           product.isVisibleOnLiff
             ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300"
             : "bg-muted text-muted-foreground"
@@ -158,12 +158,12 @@ function ProductRow({ product }: { product: AdminProduct }) {
         </span>
       </td>
       <td className="px-4 py-4">
-        <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ${statusStyle[product.syncStatus]}`}>
+        <span className={`inline-flex h-7 items-center rounded-full px-3 text-xs font-black ring-1 ${statusStyle[product.syncStatus]}`}>
           {statusLabel[product.syncStatus]}
         </span>
       </td>
       <td className="px-4 py-4 text-right">
-        <Link href={`/products/${product.id}/edit`} className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+        <Link href={`/products/${product.parentProductId ?? product.id}/edit`} className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
           ตรวจรายละเอียด
         </Link>
       </td>

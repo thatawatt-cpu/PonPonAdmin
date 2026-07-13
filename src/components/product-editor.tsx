@@ -43,6 +43,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { Textarea } from "@/components/ui/textarea";
 import type { AdminProduct } from "@/lib/admin-products";
 import { ShadcnProductContentEditor } from "@/components/shadcn-product-content-editor";
+import { StickyActionHeader } from "@/components/sticky-action-header";
 
 type StorefrontMedia = {
   label: string;
@@ -276,22 +277,34 @@ export function ProductEditor({
           method: "PUT",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            slug, originalPrice, promotionBadge, highlights,
+            slug,
+            originalPrice,
+            promotionBadge,
+            highlights,
             richDescription: resolvedContentHtml,
             isFeatured, isBestSeller, isOnHomepage,
+            // ถ้า variant ตัวนี้คือ product หลัก (id เดียวกัน) ให้รวม options ในนี้
+            // เพื่อป้องกัน 2 PUT ไปที่ endpoint เดียวกันพร้อมกัน แล้ว options โดน overwrite เป็น null
+            ...(variants.some(v => v.id === id) ? {
+              options: optionNames
+                .map(name => ({ name, value: variantOptions.get(id)?.[name] ?? "" }))
+                .filter(o => o.value),
+            } : {}),
           }),
         }).then((res) => { if (!res.ok) throw new Error("บันทึก settings ไม่สำเร็จ"); }),
-        ...variantProducts.map(v =>
-          fetch(`/api/backend/admin/products/${v.id}/ponpon-settings`, {
-            method: "PUT",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              options: optionNames
-                .map(name => ({ name, value: variantOptions.get(v.id)?.[name] ?? "" }))
-                .filter(o => o.value),
-            }),
-          }).then(res => { if (!res.ok) throw new Error("บันทึก options ไม่สำเร็จ"); })
-        ),
+        ...variants
+          .filter(v => v.id !== id)
+          .map(v =>
+            fetch(`/api/backend/admin/products/${v.id}/ponpon-settings`, {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                options: optionNames
+                  .map(name => ({ name, value: variantOptions.get(v.id)?.[name] ?? "" }))
+                  .filter(o => o.value),
+              }),
+            }).then(res => { if (!res.ok) throw new Error("บันทึก options ไม่สำเร็จ"); })
+          ),
       ]);
 
       setStorefrontImages(resolvedImages);
@@ -320,22 +333,13 @@ export function ProductEditor({
 
   return (
     <div>
-      {/* Sticky header */}
-      <div className="sticky top-0 z-20 -mx-4 -mt-4 mb-6 border-b bg-background/80 backdrop-blur-sm sm:-mx-6 sm:-mt-6">
-        <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-              Product Editor
-            </p>
-            <h1 className="mt-0.5 truncate text-xl font-black tracking-tight sm:text-2xl">
-              {groupName}
-            </h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              SKU Group {groupSku} · {variantProducts.length} ตัวเลือก · สต็อกรวม {totalStock} ชิ้น
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
-            <div className="flex flex-wrap gap-2">
+      <StickyActionHeader
+        eyebrow="Product Editor"
+        title={groupName}
+        description={`SKU Group ${groupSku} · ${variantProducts.length} ตัวเลือก · สต็อกรวม ${totalStock} ชิ้น`}
+        feedback={saveError ? <span className="text-destructive">{saveError}</span> : undefined}
+        actions={
+          <>
               <Button type="button" variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
                 Preview
               </Button>
@@ -351,13 +355,9 @@ export function ProductEditor({
                 )}
                 {saving ? "กำลังบันทึก..." : saved ? "✓ บันทึกแล้ว" : "บันทึกการแก้ไข"}
               </Button>
-            </div>
-            {saveError ? (
-              <p className="text-xs text-destructive">{saveError}</p>
-            ) : null}
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         {/* Left: Main form */}
@@ -1069,9 +1069,19 @@ function ProductPreviewModal({
   >(null);
   const groupName = getGroupName(product.name);
   const totalStock = variants.reduce((sum, variant) => sum + variant.stock, 0);
-  const prices = variants.map((variant) => variant.price);
+  const prices = variants.map((variant) => variant.displayPrice);
   const minPrice = Math.min(...prices);
   const maxPrice = Math.max(...prices);
+  const hasFlashSalePrice =
+    product.priceSource === "flash_sale" ||
+    variants.some((variant) => variant.priceSource === "flash_sale");
+  const displayOriginalPrices = variants
+    .map((variant) => variant.displayOriginalPrice)
+    .filter((price): price is number => typeof price === "number" && price > 0);
+  const previewOriginalPrice =
+    hasFlashSalePrice && displayOriginalPrices.length
+      ? Math.max(...displayOriginalPrices)
+      : originalPrice;
   const previewImages = storefrontImages.length ? storefrontImages : [
     { label: product.name, src: product.image },
     ...variants.slice(0, 4).map((variant) => ({
@@ -1211,6 +1221,11 @@ function ProductPreviewModal({
                 <span className="rounded-full bg-primary px-3 py-1 text-[11px] font-black text-primary-foreground">
                   ขายดี
                 </span>
+                {hasFlashSalePrice ? (
+                  <span className="rounded-full bg-red-600 px-3 py-1 text-[11px] font-black text-white">
+                    Flash Sale
+                  </span>
+                ) : null}
                 <span className="rounded-full border border-border px-3 py-1 text-[11px] font-black text-foreground">
                   Preview
                 </span>
@@ -1225,9 +1240,11 @@ function ProductPreviewModal({
                 <p className="text-3xl font-black text-foreground">
                   {formatNumberPriceRange(minPrice, maxPrice)}
                 </p>
-                <p className="pb-1 text-sm font-bold text-zinc-400 line-through">
-                  ฿{originalPrice.toLocaleString()}
-                </p>
+                {previewOriginalPrice > minPrice ? (
+                  <p className="pb-1 text-sm font-bold text-zinc-400 line-through">
+                    ฿{previewOriginalPrice.toLocaleString()}
+                  </p>
+                ) : null}
               </div>
 
               <div className="mt-4">
@@ -1267,8 +1284,13 @@ function ProductPreviewModal({
                           {getVariantLabel(variant.zortSku, groupSku)}
                         </p>
                         <p className="mt-0.5 text-xs font-bold text-zinc-500">
-                          ฿{variant.price.toLocaleString()} · เหลือ {variant.stock} ชิ้น
+                          ฿{variant.displayPrice.toLocaleString()} · เหลือ {variant.stock} ชิ้น
                         </p>
+                        {variant.priceSource === "flash_sale" ? (
+                          <p className="mt-1 text-[11px] font-black text-red-600">
+                            Flash Sale
+                          </p>
+                        ) : null}
                       </div>
                     </button>
                   ))}
@@ -1351,7 +1373,7 @@ function VariantTable({
         {optionNames.map(name => (
           <span
             key={name}
-            className="flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium"
+            className="flex h-7 items-center gap-1.5 rounded-full bg-secondary px-3 text-sm font-semibold"
           >
             {name}
             <button
@@ -1407,7 +1429,7 @@ function VariantTable({
                               <Input
                                 value={opts[name] ?? ""}
                                 onChange={e => onOptionValueChange(variant.id, name, e.target.value)}
-                                className="h-7 text-xs"
+                                className="h-9 text-sm"
                                 placeholder={`ค่า${name}`}
                               />
                             </div>
@@ -1432,7 +1454,7 @@ function VariantTable({
                       <span className="ml-1 text-xs text-muted-foreground">ชิ้น</span>
                     </TableCell>
                     <TableCell className="py-3">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      <span className={`inline-flex h-7 items-center rounded-full px-2.5 text-xs font-semibold ${
                         variant.isVisibleOnLiff
                           ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-400"
                           : "bg-muted text-muted-foreground"
@@ -1471,7 +1493,7 @@ function AddOptionInput({ onAdd }: { onAdd: (name: string) => void }) {
           setOpen(true);
           requestAnimationFrame(() => inputRef.current?.focus());
         }}
-        className="flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+        className="flex h-9 items-center gap-1.5 rounded-full border border-dashed border-border px-3 text-sm font-semibold text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
       >
         <Plus className="size-3" />
         เพิ่มตัวเลือก
@@ -1489,13 +1511,13 @@ function AddOptionInput({ onAdd }: { onAdd: (name: string) => void }) {
           if (e.key === "Enter") { e.preventDefault(); commit(); }
           if (e.key === "Escape") { setOpen(false); setValue(""); }
         }}
-        className="h-7 w-28 text-xs"
+        className="h-9 w-32 text-sm"
         placeholder="เช่น สี, รุ่น"
       />
-      <Button type="button" size="sm" className="h-7 px-2.5 text-xs" onClick={commit}>
+      <Button type="button" size="sm" onClick={commit}>
         เพิ่ม
       </Button>
-      <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => { setOpen(false); setValue(""); }}>
+      <Button type="button" variant="ghost" size="icon-sm" onClick={() => { setOpen(false); setValue(""); }}>
         <X className="size-3" />
       </Button>
     </div>

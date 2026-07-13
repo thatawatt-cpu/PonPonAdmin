@@ -8,6 +8,8 @@ type Context = {
   params: Promise<{ path: string[] }>;
 };
 
+type ApiRawResponse = Awaited<ReturnType<typeof ponponApiRaw>>;
+
 export async function GET(request: NextRequest, context: Context) {
   return proxy(request, context);
 }
@@ -58,7 +60,8 @@ async function proxy(request: NextRequest, context: Context) {
     headers.set("content-type", "application/json");
   }
 
-  let apiResponse;
+  let apiResponse: ApiRawResponse;
+  let refreshedTokenBody: Buffer | null = null;
 
   try {
     apiResponse = await ponponApiRaw(targetPath, {
@@ -66,6 +69,35 @@ async function proxy(request: NextRequest, context: Context) {
       headers,
       method: request.method,
     });
+
+    if (
+      apiResponse.status === 401 &&
+      cookieRefreshToken &&
+      shouldRefreshToken(targetPath)
+    ) {
+      const refreshResponse = await refreshAccessToken(cookieRefreshToken);
+
+      if (refreshResponse.ok) {
+        const refreshedToken = getAccessToken(refreshResponse.body);
+
+        if (refreshedToken) {
+          headers.set("authorization", `Bearer ${refreshedToken}`);
+          apiResponse = await ponponApiRaw(targetPath, {
+            body,
+            headers,
+            method: request.method,
+          });
+          refreshedTokenBody = refreshResponse.body;
+        }
+      } else {
+        const response = NextResponse.json(
+          { message: "Session expired" },
+          { status: 401 },
+        );
+        clearAuthCookies(response);
+        return response;
+      }
+    }
   } catch (error) {
     if (targetPath === "/api/auth/logout") {
       const response = NextResponse.json({ success: true });
@@ -84,7 +116,15 @@ async function proxy(request: NextRequest, context: Context) {
     status: apiResponse.status,
   });
 
-  if (targetPath === "/api/admin/auth/login" && apiResponse.ok) {
+  if (refreshedTokenBody) {
+    setAuthCookies(response, refreshedTokenBody);
+  }
+
+  if (
+    (targetPath === "/api/admin/auth/login" ||
+      targetPath === "/api/auth/refresh-token") &&
+    apiResponse.ok
+  ) {
     setAuthCookies(response, apiResponse.body);
   }
 
@@ -93,6 +133,34 @@ async function proxy(request: NextRequest, context: Context) {
   }
 
   return response;
+}
+
+async function refreshAccessToken(refreshToken: string) {
+  return ponponApiRaw("/api/auth/refresh-token", {
+    body: Buffer.from(JSON.stringify({ refreshToken })),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+}
+
+function shouldRefreshToken(targetPath: string) {
+  return ![
+    "/api/admin/auth/login",
+    "/api/auth/logout",
+    "/api/auth/refresh-token",
+  ].includes(targetPath);
+}
+
+function getAccessToken(body: Buffer) {
+  try {
+    const payload = JSON.parse(body.toString("utf8")) as {
+      accessToken?: string;
+    };
+
+    return payload.accessToken;
+  } catch {
+    return undefined;
+  }
 }
 
 async function getBody(request: NextRequest) {

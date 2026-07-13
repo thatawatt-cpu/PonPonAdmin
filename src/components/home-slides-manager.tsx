@@ -44,6 +44,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { StickyActionHeader } from "@/components/sticky-action-header";
 import { cn } from "@/lib/utils";
 
 type EditableHomeSlide = HomeSlide & {
@@ -365,30 +366,32 @@ export function HomeSlidesManager({
 
   return (
     <div className="space-y-5">
-      <header className="sticky top-0 z-20 -mx-4 border-b bg-background/85 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[11px] font-black uppercase text-muted-foreground">
-                Homepage
-              </p>
-              <Badge variant="secondary">
-                {activeSlotCount}/{MAX_HOME_SLIDES}
-              </Badge>
-            </div>
-            <h1 className="mt-1 text-2xl font-black tracking-normal">
-              จัดการสไลด์หน้าแรก
-            </h1>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              แก้ไขสไลด์ Hero Banner ที่แสดงบนหน้าร้าน PonPon
-            </p>
-            {isMaxed ? (
-              <p className="mt-2 text-xs font-medium text-muted-foreground">
-                เพิ่มสไลด์ครบ {MAX_HOME_SLIDES} รายการแล้ว
-              </p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
+      <StickyActionHeader
+        eyebrow={
+          <span className="inline-flex items-center gap-2">
+            Homepage
+            <Badge variant="secondary">
+              {activeSlotCount}/{MAX_HOME_SLIDES}
+            </Badge>
+          </span>
+        }
+        title="จัดการสไลด์หน้าแรก"
+        description={
+          isMaxed
+            ? `แก้ไขสไลด์ Hero Banner ที่แสดงบนหน้าร้าน PonPon · เพิ่มสไลด์ครบ ${MAX_HOME_SLIDES} รายการแล้ว`
+            : "แก้ไขสไลด์ Hero Banner ที่แสดงบนหน้าร้าน PonPon"
+        }
+        feedback={
+          activeSlide
+            ? activeSlide.isNew
+              ? "มีการแก้ไขที่ยังไม่บันทึก"
+              : message === "บันทึกแล้ว"
+                ? "บันทึกแล้ว"
+                : "พร้อมบันทึกการเปลี่ยนแปลง"
+            : undefined
+        }
+        actions={
+          <>
             <a
               href="http://localhost:3100"
               target="_blank"
@@ -402,9 +405,22 @@ export function HomeSlidesManager({
               <Plus />
               เพิ่มสไลด์
             </Button>
-          </div>
-        </div>
-      </header>
+            {activeSlide ? (
+              <Button
+                disabled={saving || activeImageUploading}
+                onClick={() => saveSlide(activeSlide)}
+              >
+                <Save />
+                {saving
+                  ? "กำลังบันทึก..."
+                  : activeImageUploading
+                    ? "กำลังอัปโหลดรูป..."
+                    : "บันทึกสไลด์"}
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
       {message ? (
         <Alert>
@@ -440,7 +456,7 @@ export function HomeSlidesManager({
                   key={option.value}
                   type="button"
                   onClick={() => setFilter(option.value)}
-                  className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition ${
+                  className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition ${
                     filter === option.value
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border bg-background text-muted-foreground hover:bg-muted"
@@ -691,36 +707,6 @@ export function HomeSlidesManager({
                 </p>
               </SlideEditorCard>
 
-              <div className="sticky bottom-4 z-10 rounded-xl border bg-background/95 p-3 shadow-sm backdrop-blur">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-muted-foreground">
-                    {activeSlide.isNew
-                      ? "มีการแก้ไขที่ยังไม่บันทึก"
-                      : message === "บันทึกแล้ว"
-                        ? "บันทึกแล้ว"
-                        : "พร้อมบันทึกการเปลี่ยนแปลง"}
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setActiveId(slides[0]?.id ?? "")}
-                    >
-                      ยกเลิก
-                    </Button>
-                    <Button
-                      disabled={saving || activeImageUploading}
-                      onClick={() => saveSlide(activeSlide)}
-                    >
-                      <Save />
-                      {saving
-                        ? "กำลังบันทึก..."
-                        : activeImageUploading
-                          ? "กำลังอัปโหลดรูป..."
-                          : "บันทึกสไลด์"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
             </main>
 
             <aside className="space-y-5 xl:sticky xl:top-28 xl:self-start">

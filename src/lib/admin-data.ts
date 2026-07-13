@@ -13,11 +13,11 @@ export const adminProducts = [
 ];
 
 export const adminOrders = [
-  { id: "ORD001", customer: "Pon Pon Customer", phone: "081-234-5678", items: 3, total: 423, payment: "PromptPay", status: "รอตรวจสอบสลิป", createdAt: "8 มิ.ย. 2569 10:24" },
-  { id: "ORD002", customer: "Mint", phone: "089-555-0123", items: 1, total: 259, payment: "PromptPay", status: "กำลังแพ็ก", createdAt: "8 มิ.ย. 2569 09:48" },
-  { id: "ORD003", customer: "Ploy", phone: "086-111-4422", items: 4, total: 618, payment: "เก็บเงินปลายทาง", status: "จัดส่งแล้ว", createdAt: "7 มิ.ย. 2569 16:20" },
-  { id: "ORD004", customer: "Bank", phone: "082-777-3011", items: 2, total: 398, payment: "PromptPay", status: "สำเร็จ", createdAt: "6 มิ.ย. 2569 11:05" },
-  { id: "ORD005", customer: "Ning", phone: "095-234-0019", items: 2, total: 548, payment: "PromptPay", status: "ยกเลิก", createdAt: "5 มิ.ย. 2569 13:14" },
+  { id: "ORD001", customer: "Pon Pon Customer", phone: "081-234-5678", items: 3, total: 423, payment: "Payment Gateway", status: "ชำระเงินแล้ว", createdAt: "8 มิ.ย. 2569 10:24" },
+  { id: "ORD002", customer: "Mint", phone: "089-555-0123", items: 1, total: 259, payment: "Payment Gateway", status: "กำลังแพ็ก", createdAt: "8 มิ.ย. 2569 09:48" },
+  { id: "ORD003", customer: "Ploy", phone: "086-111-4422", items: 4, total: 618, payment: "Payment Gateway", status: "จัดส่งแล้ว", createdAt: "7 มิ.ย. 2569 16:20" },
+  { id: "ORD004", customer: "Bank", phone: "082-777-3011", items: 2, total: 398, payment: "Payment Gateway", status: "สำเร็จ", createdAt: "6 มิ.ย. 2569 11:05" },
+  { id: "ORD005", customer: "Ning", phone: "095-234-0019", items: 2, total: 548, payment: "Payment Gateway", status: "ยกเลิก", createdAt: "5 มิ.ย. 2569 13:14" },
 ];
 
 export const adminCoupons = [

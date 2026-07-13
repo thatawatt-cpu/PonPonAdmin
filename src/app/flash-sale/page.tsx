@@ -29,23 +29,27 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { FlashSaleCardActions } from "@/components/flash-sale-card-actions";
 import { cn } from "@/lib/utils";
 
 const statusLabel: Record<FlashSaleStatus, string> = {
   active: "กำลังแสดง",
-  upcoming: "แบบร่าง",
+  inactive: "นอกช่วงเวลา",
+  upcoming: "กำลังจะเริ่ม",
   ended: "สิ้นสุดแล้ว",
 };
 
 const statusDescription: Record<FlashSaleStatus, string> = {
   active: "กำลังแสดงอยู่ในช่วงเวลา Flash Sale",
-  upcoming: "ยังไม่เผยแพร่",
+  inactive: "เผยแพร่แล้วแต่ยังไม่อยู่ใน slot เวลาปัจจุบัน",
+  upcoming: "ยังไม่ถึงวันที่เริ่ม Flash Sale",
   ended: "จบช่วงเวลา Flash Sale",
 };
 
 const statusVariant: Record<FlashSaleStatus, "default" | "secondary" | "outline"> =
   {
     active: "default",
+    inactive: "outline",
     upcoming: "outline",
     ended: "secondary",
   };
@@ -59,7 +63,12 @@ function formatDate(dateStr: string) {
 }
 
 function getFlashSaleFilter(status?: string): FlashSaleFilter {
-  if (status === "active" || status === "upcoming" || status === "ended") {
+  if (
+    status === "active" ||
+    status === "inactive" ||
+    status === "upcoming" ||
+    status === "ended"
+  ) {
     return status;
   }
 
@@ -83,6 +92,7 @@ export default async function FlashSalePage({
   const params = await searchParams;
   const activeFilter = getFlashSaleFilter(params.status);
   const activeCount = flashSales.filter((sale) => sale.status === "active").length;
+  const inactiveCount = flashSales.filter((sale) => sale.status === "inactive").length;
   const upcomingCount = flashSales.filter(
     (sale) => sale.status === "upcoming",
   ).length;
@@ -100,7 +110,7 @@ export default async function FlashSalePage({
             โปรโมชั่น
           </p>
           <h1 className="mt-1.5 text-3xl font-black tracking-tight sm:text-4xl">
-            แฟลชเซล
+            Flash Sale
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
             จัดการแคมเปญ Flash Sale เลือกสินค้า กำหนดช่วงเวลา และวันที่ เพื่อสร้างยอดขายในระยะเวลาจำกัด
@@ -118,7 +128,7 @@ export default async function FlashSalePage({
         </Alert>
       ) : null}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <FlashSaleStatCard
           href="/flash-sale"
           icon={<Package />}
@@ -141,10 +151,19 @@ export default async function FlashSalePage({
           href="/flash-sale?status=upcoming"
           icon={<Pencil />}
           active={activeFilter === "upcoming"}
-          label="แบบร่าง"
+          label="กำลังจะเริ่ม"
           value={upcomingCount}
           description={statusDescription.upcoming}
           tone="bg-amber-100 text-amber-700"
+        />
+        <FlashSaleStatCard
+          href="/flash-sale?status=inactive"
+          icon={<Timer />}
+          active={activeFilter === "inactive"}
+          label="นอกช่วงเวลา"
+          value={inactiveCount}
+          description={statusDescription.inactive}
+          tone="bg-sky-100 text-sky-700"
         />
         <FlashSaleStatCard
           href="/flash-sale?status=ended"
@@ -335,6 +354,9 @@ function FlashSaleCard({ sale }: { sale: FlashSale }) {
       ),
     );
   const maxDiscount = discounts.length ? Math.max(...discounts) : 0;
+  const hasReservedQuota = sale.products.some(
+    (product) => (product.reservedQuantity ?? 0) > 0,
+  );
 
   return (
     <Card className="overflow-hidden transition-colors hover:bg-muted/20">
@@ -346,9 +368,14 @@ function FlashSaleCard({ sale }: { sale: FlashSale }) {
             </p>
             <CardTitle className="mt-1 truncate">{sale.name}</CardTitle>
           </div>
-          <Badge variant={statusVariant[sale.status]}>
-            {statusLabel[sale.status]}
-          </Badge>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <Badge variant={sale.isActive ? "default" : "outline"}>
+              {sale.isActive ? "เปิดใช้งาน" : "ปิดใช้งาน"}
+            </Badge>
+            <Badge variant={statusVariant[sale.status]}>
+              {statusLabel[sale.status]}
+            </Badge>
+          </div>
         </div>
         <p className="text-xs text-muted-foreground">
           {formatDate(sale.startDate)}
@@ -377,12 +404,11 @@ function FlashSaleCard({ sale }: { sale: FlashSale }) {
               </Badge>
             ) : null}
           </div>
-          <Link
-            href={`/flash-sale/${sale.id}/edit`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            แก้ไข
-          </Link>
+          <FlashSaleCardActions
+            flashSaleId={sale.id}
+            flashSaleName={sale.name}
+            hasReservedQuota={hasReservedQuota}
+          />
         </div>
       </CardContent>
     </Card>

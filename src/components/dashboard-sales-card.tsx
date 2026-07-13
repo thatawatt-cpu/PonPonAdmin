@@ -77,12 +77,12 @@ export function DashboardSalesCard({
   }
 
   return (
-    <Card className="border-primary/25">
+    <Card className="border-emerald-300/80 bg-emerald-50/30 dark:border-emerald-800/70 dark:bg-emerald-950/10">
       <CardHeader className="gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 space-y-1.5">
             <CardTitle className="flex items-center gap-2 leading-none">
-              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+              <span className="grid size-8 place-items-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
                 <CircleDollarSign className="size-4" />
               </span>
               <span className="leading-none">ยอดขาย</span>
@@ -99,7 +99,7 @@ export function DashboardSalesCard({
             </CardDescription>
           </div>
           <CardAction>
-            <div className="inline-flex rounded-lg border bg-muted p-1">
+            <div className="inline-flex rounded-lg border border-emerald-200 bg-emerald-100/60 p-1 dark:border-emerald-900 dark:bg-emerald-950/40">
               {salesPeriodOptions.map((option) => {
                 const active = option.value === activePeriod;
 
@@ -113,7 +113,8 @@ export function DashboardSalesCard({
                       "h-9 rounded-md px-3 text-sm font-semibold text-muted-foreground transition-colors",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       "disabled:opacity-80",
-                      active && "bg-background text-foreground shadow-sm",
+                      active &&
+                        "bg-emerald-600 text-white shadow-sm hover:bg-emerald-600 dark:bg-emerald-600",
                     )}
                     aria-pressed={active}
                   >
@@ -127,7 +128,7 @@ export function DashboardSalesCard({
       </CardHeader>
       <CardContent aria-busy={isLoading}>
         <div className={cn("transition-opacity", isLoading && "opacity-60")}>
-          <p className="text-3xl font-black leading-none tracking-tight">
+          <p className="text-3xl font-black leading-none tracking-tight text-emerald-700 dark:text-emerald-300">
             {formatMoney(data.sales.total)}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">

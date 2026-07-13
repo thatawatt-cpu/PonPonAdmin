@@ -90,6 +90,7 @@ export default async function DashboardPage({
       href: "/orders",
       icon: PackageCheck,
       label: "รอแพ็กสินค้า",
+      tone: "amber" as const,
     },
     {
       action: "ไปตรวจสอบคำขอ",
@@ -97,6 +98,7 @@ export default async function DashboardPage({
       href: "/orders?returnRequestStatus=Pending",
       icon: RotateCcw,
       label: "คำขอคืนสินค้า",
+      tone: "sky" as const,
     },
     {
       action: "ไปยืนยันการคืนเงิน",
@@ -104,6 +106,7 @@ export default async function DashboardPage({
       href: "/orders?refundRequestStatus=Pending",
       icon: Banknote,
       label: "คำขอคืนเงิน",
+      tone: "rose" as const,
     },
     {
       action: "ไปหน้าสินค้า",
@@ -111,6 +114,7 @@ export default async function DashboardPage({
       href: "/products",
       icon: PackageOpen,
       label: "Variant ที่ต้องดูแล",
+      tone: "orange" as const,
     },
     {
       action: "เปิด Integration",
@@ -118,6 +122,7 @@ export default async function DashboardPage({
       href: "/integrations/zort",
       icon: AlertCircle,
       label: "ZORT Sync พบปัญหา",
+      tone: "red" as const,
     },
   ];
   const sortedUrgentTasks = [...urgentTasks].sort((a, b) => b.count - a.count);
@@ -136,6 +141,7 @@ export default async function DashboardPage({
       icon: ShoppingCart,
       detail: `${dashboard.orders.pending} รอดำเนินการ · ${dashboard.orders.awaitingPacking} รอแพ็ก · ${dashboard.orders.returnRequests} คืนสินค้า · ${dashboard.orders.refundRequests} คืนเงิน`,
       label: "ออเดอร์รอดำเนินการ",
+      tone: "amber" as const,
       value: `${actionableOrderCount}`,
     },
     {
@@ -145,6 +151,7 @@ export default async function DashboardPage({
         attentionOutOfStockCount,
       ),
       label: "Variant ที่ต้องดูแล",
+      tone: "orange" as const,
       value: `${attentionVariantCount}`,
     },
   ];
@@ -190,17 +197,33 @@ export default async function DashboardPage({
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <DashboardSalesCard key={dashboard.period} dashboard={dashboard} />
-        {stats.map((stat, index) => (
-          <Card key={stat.label} className={index === 0 ? "border-primary/25" : ""}>
+        {stats.map((stat) => (
+          <Card
+            key={stat.label}
+            className={cn(
+              "overflow-hidden",
+              summaryToneClasses(stat.tone, Number(stat.value) > 0).card,
+            )}
+          >
             <CardContent className="flex items-start gap-4 p-5">
-              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
+              <span
+                className={cn(
+                  "grid size-11 shrink-0 place-items-center rounded-xl",
+                  summaryToneClasses(stat.tone, Number(stat.value) > 0).icon,
+                )}
+              >
                 <stat.icon className="size-5" />
               </span>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">
                   {stat.label}
                 </p>
-                <p className="mt-1 text-3xl font-black leading-none tracking-tight">
+                <p
+                  className={cn(
+                    "mt-1 text-3xl font-black leading-none tracking-tight",
+                    summaryToneClasses(stat.tone, Number(stat.value) > 0).value,
+                  )}
+                >
                   {stat.value}
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">{stat.detail}</p>
@@ -212,7 +235,12 @@ export default async function DashboardPage({
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
         <div className="space-y-6">
-          <Card className={cn(totalUrgentTaskCount > 0 && "border-primary/30 shadow-sm")}>
+          <Card
+            className={cn(
+              totalUrgentTaskCount > 0 &&
+                "border-amber-300/80 bg-amber-50/30 shadow-sm dark:border-amber-700/70 dark:bg-amber-950/10",
+            )}
+          >
             <CardHeader>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -224,7 +252,7 @@ export default async function DashboardPage({
                   </CardDescription>
                 </div>
                 {totalUrgentTaskCount > 0 ? (
-                  <Badge className="h-8 rounded-full bg-primary px-3 text-sm text-primary-foreground">
+                  <Badge className="h-8 rounded-full bg-amber-500 px-3 text-sm text-white hover:bg-amber-500 dark:bg-amber-600">
                     ต้องทำ {totalUrgentTaskCount.toLocaleString("th-TH")} งาน
                   </Badge>
                 ) : null}
@@ -279,7 +307,12 @@ export default async function DashboardPage({
                             </p>
                           </TableCell>
                           <TableCell>{order.customerName || "ไม่ระบุ"}</TableCell>
-                          <TableCell className="text-muted-foreground">
+                          <TableCell
+                            className={cn(
+                              "font-medium",
+                              paymentStatusClass(order.paymentStatus),
+                            )}
+                          >
                             {paymentStatusLabel(order.paymentStatus)}
                           </TableCell>
                           <TableCell className="font-semibold">
@@ -369,17 +402,20 @@ export default async function DashboardPage({
               <PaymentSummary
                 detail="ระบบยืนยันการชำระเงินแล้ว"
                 label="ชำระสำเร็จ"
+                tone="emerald"
                 value={dashboard.payments.paid}
               />
               <PaymentSummary
                 detail="กำลังรอผลจาก Payment Gateway"
                 label="รอดำเนินการ"
+                tone="amber"
                 value={dashboard.payments.pending}
               />
               {dashboard.payments.partialPayment > 0 ? (
                 <PaymentSummary
                   detail="ยอดชำระยังไม่ครบ"
                   label="ชำระบางส่วน"
+                  tone="orange"
                   value={dashboard.payments.partialPayment}
                 />
               ) : null}
@@ -387,6 +423,7 @@ export default async function DashboardPage({
                 <PaymentSummary
                   detail="ยอดชำระมากกว่ายอดออเดอร์"
                   label="ชำระเกิน"
+                  tone="sky"
                   value={dashboard.payments.excessPayment}
                 />
               ) : null}
@@ -394,6 +431,7 @@ export default async function DashboardPage({
                 <PaymentSummary
                   detail="รายการชำระเงินที่ถูกยกเลิก"
                   label="ยกเลิก"
+                  tone="red"
                   value={dashboard.payments.voided}
                 />
               ) : null}
@@ -435,9 +473,9 @@ export default async function DashboardPage({
               </CardAction>
             </CardHeader>
             <CardContent className="space-y-2">
-              <SyncRow label="สำเร็จ" value={dashboard.zortSync.succeeded} />
-              <SyncRow label="กำลังดำเนินการ" value={dashboard.zortSync.pending} />
-              <SyncRow label="พบปัญหา" value={dashboard.zortSync.failed} />
+              <SyncRow label="สำเร็จ" tone="emerald" value={dashboard.zortSync.succeeded} />
+              <SyncRow label="กำลังดำเนินการ" tone="amber" value={dashboard.zortSync.pending} />
+              <SyncRow label="พบปัญหา" tone="red" value={dashboard.zortSync.failed} />
               <p className="pt-1 text-xs text-muted-foreground">
                 สำเร็จล่าสุด {formatDate(dashboard.zortSync.lastSuccessfulAt)}
               </p>
@@ -478,16 +516,18 @@ function TaskRow({
     href?: string;
     icon: ComponentType<{ className?: string }>;
     label: string;
+    tone: "amber" | "orange" | "red" | "rose" | "sky";
   };
 }) {
   const needsAction = task.count > 0;
+  const tone = taskToneClasses(task.tone);
 
   return (
     <div
       className={cn(
         "flex items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors",
         needsAction
-          ? "border-primary/25 bg-primary/5"
+          ? tone.row
           : "bg-background opacity-70",
       )}
     >
@@ -496,7 +536,7 @@ function TaskRow({
           className={cn(
             "grid size-10 shrink-0 place-items-center rounded-full",
             needsAction
-              ? "bg-primary text-primary-foreground"
+              ? tone.icon
               : "bg-muted text-muted-foreground",
           )}
         >
@@ -510,7 +550,11 @@ function TaskRow({
       <div className="flex items-center gap-2">
         <Badge
           variant={needsAction ? "default" : "secondary"}
-          className={cn(needsAction && "h-8 min-w-8 rounded-full px-3 text-sm")}
+          className={cn(
+            needsAction &&
+              "h-8 min-w-8 rounded-full border-0 px-3 text-sm text-white",
+            needsAction && tone.badge,
+          )}
         >
           {task.count}
         </Badge>
@@ -520,7 +564,7 @@ function TaskRow({
             className={cn(
               "text-xs font-semibold transition-colors",
               needsAction
-                ? "text-primary hover:text-primary/80"
+                ? tone.link
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -595,7 +639,12 @@ function ProductAttentionRow({
   const issue = attentionProductIssue(item.issue);
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border px-3 py-3 sm:px-4">
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-xl border px-3 py-3 sm:px-4",
+        issue.row,
+      )}
+    >
       <div className="flex min-w-0 items-center gap-3">
         <div className="relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted">
           {item.imageUrl ? (
@@ -623,7 +672,7 @@ function ProductAttentionRow({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <Badge variant={issue.variant}>
+        <Badge variant={issue.variant} className={issue.badge}>
           {issue.label}
         </Badge>
         <Link
@@ -650,20 +699,28 @@ function attentionProductIssue(issue: DashboardAttentionProduct["issue"]) {
   const labels: Record<
     DashboardAttentionProduct["issue"],
     {
+      badge: string;
       label: string;
+      row: string;
       variant: "destructive" | "outline";
     }
   > = {
     LowStock: {
+      badge: "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
       label: "ใกล้หมด",
+      row: "border-amber-200 bg-amber-50/40 dark:border-amber-900/70 dark:bg-amber-950/10",
       variant: "outline",
     },
     OutOfStock: {
+      badge: "bg-red-600 text-white hover:bg-red-600",
       label: "หมด",
+      row: "border-red-200 bg-red-50/40 dark:border-red-900/70 dark:bg-red-950/10",
       variant: "destructive",
     },
     SyncIssue: {
+      badge: "bg-rose-600 text-white hover:bg-rose-600",
       label: "Sync ผิดพลาด / หายจากต้นทาง",
+      row: "border-rose-200 bg-rose-50/40 dark:border-rose-900/70 dark:bg-rose-950/10",
       variant: "destructive",
     },
   };
@@ -686,7 +743,13 @@ function SyncRunRow({ run }: { run: DashboardSyncRun }) {
   const running = run.status === "Pending" || run.status === "Running";
 
   return (
-    <div className="rounded-xl border px-4 py-3">
+    <div
+      className={cn(
+        "rounded-xl border px-4 py-3",
+        failed && "border-red-200 bg-red-50/40 dark:border-red-900/70 dark:bg-red-950/10",
+        running && "border-amber-200 bg-amber-50/40 dark:border-amber-900/70 dark:bg-amber-950/10",
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">
@@ -713,30 +776,170 @@ function SyncRunRow({ run }: { run: DashboardSyncRun }) {
 function PaymentSummary({
   detail,
   label,
+  tone,
   value,
 }: {
   detail: string;
   label: string;
+  tone: "amber" | "emerald" | "orange" | "red" | "sky";
   value: number;
 }) {
+  const colors = paymentToneClasses(tone);
+
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border bg-background px-4 py-3">
+    <div
+      className={cn(
+        "flex items-center justify-between gap-4 rounded-xl border px-4 py-3",
+        colors.row,
+      )}
+    >
       <div>
         <p className="text-sm font-semibold">{label}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
       </div>
-      <span className="text-2xl font-black">{value}</span>
+      <span className={cn("text-2xl font-black", colors.value)}>{value}</span>
     </div>
   );
 }
 
-function SyncRow({ label, value }: { label: string; value: number }) {
+function SyncRow({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone: "amber" | "emerald" | "red";
+  value: number;
+}) {
+  const colors = syncToneClasses(tone);
+
   return (
-    <div className="flex items-center justify-between rounded-xl bg-muted px-4 py-3">
+    <div
+      className={cn(
+        "flex items-center justify-between rounded-xl border px-4 py-3",
+        colors.row,
+      )}
+    >
       <p className="text-sm font-medium">{label}</p>
-      <Badge variant="secondary">{value} รายการ</Badge>
+      <Badge variant="secondary" className={colors.badge}>
+        {value} รายการ
+      </Badge>
     </div>
   );
+}
+
+function summaryToneClasses(
+  tone: "amber" | "orange",
+  active: boolean,
+) {
+  if (!active) {
+    return {
+      card: "border-border",
+      icon: "bg-muted text-muted-foreground",
+      value: "text-foreground",
+    };
+  }
+
+  if (tone === "amber") {
+    return {
+      card: "border-amber-300/80 bg-amber-50/30 dark:border-amber-800/70 dark:bg-amber-950/10",
+      icon: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
+      value: "text-amber-700 dark:text-amber-300",
+    };
+  }
+
+  return {
+    card: "border-orange-300/80 bg-orange-50/30 dark:border-orange-800/70 dark:bg-orange-950/10",
+    icon: "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300",
+    value: "text-orange-700 dark:text-orange-300",
+  };
+}
+
+function taskToneClasses(
+  tone: "amber" | "orange" | "red" | "rose" | "sky",
+) {
+  const colors = {
+    amber: {
+      badge: "bg-amber-500 hover:bg-amber-500 dark:bg-amber-600",
+      icon: "bg-amber-500 text-white dark:bg-amber-600",
+      link: "text-amber-700 hover:text-amber-800 dark:text-amber-300",
+      row: "border-amber-300 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/15",
+    },
+    orange: {
+      badge: "bg-orange-500 hover:bg-orange-500 dark:bg-orange-600",
+      icon: "bg-orange-500 text-white dark:bg-orange-600",
+      link: "text-orange-700 hover:text-orange-800 dark:text-orange-300",
+      row: "border-orange-300 bg-orange-50/50 dark:border-orange-800 dark:bg-orange-950/15",
+    },
+    red: {
+      badge: "bg-red-600 hover:bg-red-600",
+      icon: "bg-red-600 text-white",
+      link: "text-red-700 hover:text-red-800 dark:text-red-300",
+      row: "border-red-300 bg-red-50/50 dark:border-red-800 dark:bg-red-950/15",
+    },
+    rose: {
+      badge: "bg-rose-600 hover:bg-rose-600",
+      icon: "bg-rose-600 text-white",
+      link: "text-rose-700 hover:text-rose-800 dark:text-rose-300",
+      row: "border-rose-300 bg-rose-50/50 dark:border-rose-800 dark:bg-rose-950/15",
+    },
+    sky: {
+      badge: "bg-sky-600 hover:bg-sky-600",
+      icon: "bg-sky-600 text-white",
+      link: "text-sky-700 hover:text-sky-800 dark:text-sky-300",
+      row: "border-sky-300 bg-sky-50/50 dark:border-sky-800 dark:bg-sky-950/15",
+    },
+  };
+
+  return colors[tone];
+}
+
+function paymentToneClasses(
+  tone: "amber" | "emerald" | "orange" | "red" | "sky",
+) {
+  const colors = {
+    amber: {
+      row: "border-amber-200 bg-amber-50/40 dark:border-amber-900/70 dark:bg-amber-950/10",
+      value: "text-amber-700 dark:text-amber-300",
+    },
+    emerald: {
+      row: "border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/70 dark:bg-emerald-950/10",
+      value: "text-emerald-700 dark:text-emerald-300",
+    },
+    orange: {
+      row: "border-orange-200 bg-orange-50/40 dark:border-orange-900/70 dark:bg-orange-950/10",
+      value: "text-orange-700 dark:text-orange-300",
+    },
+    red: {
+      row: "border-red-200 bg-red-50/40 dark:border-red-900/70 dark:bg-red-950/10",
+      value: "text-red-700 dark:text-red-300",
+    },
+    sky: {
+      row: "border-sky-200 bg-sky-50/40 dark:border-sky-900/70 dark:bg-sky-950/10",
+      value: "text-sky-700 dark:text-sky-300",
+    },
+  };
+
+  return colors[tone];
+}
+
+function syncToneClasses(tone: "amber" | "emerald" | "red") {
+  const colors = {
+    amber: {
+      badge: "bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300",
+      row: "border-amber-200 bg-amber-50/40 dark:border-amber-900/70 dark:bg-amber-950/10",
+    },
+    emerald: {
+      badge: "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300",
+      row: "border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/70 dark:bg-emerald-950/10",
+    },
+    red: {
+      badge: "bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-950/60 dark:text-red-300",
+      row: "border-red-200 bg-red-50/40 dark:border-red-900/70 dark:bg-red-950/10",
+    },
+  };
+
+  return colors[tone];
 }
 
 function parseSalesPeriod(
@@ -787,6 +990,18 @@ function paymentStatusLabel(status: string) {
   };
 
   return labels[status] ?? status;
+}
+
+function paymentStatusClass(status: string) {
+  const classes: Record<string, string> = {
+    ExcessPayment: "text-sky-700 dark:text-sky-300",
+    Paid: "text-emerald-700 dark:text-emerald-300",
+    PartialPayment: "text-orange-700 dark:text-orange-300",
+    Pending: "text-amber-700 dark:text-amber-300",
+    Voided: "text-red-700 dark:text-red-300",
+  };
+
+  return classes[status] ?? "text-muted-foreground";
 }
 
 function orderStatusLabel(status: string) {

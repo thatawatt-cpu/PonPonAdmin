@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AdminUsersManager } from "@/components/admin-users-manager";
 import { IntegrationsSettingsForm } from "@/components/integrations-settings-form";
 import { PageHeader } from "@/components/page-header";
 import { ShippopSenderForm } from "@/components/shippop-sender-form";
@@ -16,6 +17,7 @@ const settings = [
   { id: "line", title: "LINE LIFF", description: "LIFF ID, Channel ID และสถานะการเชื่อมต่อ" },
   { id: "notifications", title: "การแจ้งเตือน", description: "ออเดอร์ใหม่ สลิปรอตรวจ และสินค้าสต็อกต่ำ" },
   { id: "integrations", title: "Integrations", description: "LINE, ZORT Webhook, SHIPPOP, OMISE และ SUPABASE" },
+  { id: "admins", title: "ผู้ดูแลระบบ", description: "สร้างบัญชี กำหนด Role และสิทธิ์การใช้งาน" },
 ];
 
 function StoreForm() {
@@ -107,7 +109,8 @@ export default function SettingsPage() {
           {activeId === "store" && <StoreForm />}
           {activeId === "shipping" && <ShippopSenderForm />}
           {activeId === "integrations" && <IntegrationsSettingsForm />}
-          {activeId !== "store" && activeId !== "shipping" && activeId !== "integrations" && (
+          {activeId === "admins" && <AdminUsersManager />}
+          {activeId !== "store" && activeId !== "shipping" && activeId !== "integrations" && activeId !== "admins" && (
             <PlaceholderForm title={settings.find((setting) => setting.id === activeId)?.title ?? ""} />
           )}
         </div>

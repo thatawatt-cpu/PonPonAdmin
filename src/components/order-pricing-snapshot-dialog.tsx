@@ -55,7 +55,94 @@ function fmtMoney(n: number) {
 async function getPricingSnapshot(orderId: string) {
   const response = await fetch(`/api/backend/admin/orders/${orderId}/pricing-snapshot`);
   if (!response.ok) throw new Error("fetch failed");
-  return (await response.json()) as PricingSnapshot;
+  return normalizePricingSnapshot(await response.json());
+}
+
+type UnknownRecord = Record<string, unknown>;
+
+function normalizePricingSnapshot(value: unknown): PricingSnapshot {
+  const snapshot = asRecord(value);
+  const promotionDiscountAmount = numberValue(snapshot, "promotionDiscountAmount", "PromotionDiscountAmount");
+  const explicitCouponDiscount = optionalNumberValue(snapshot, "couponDiscountAmount", "CouponDiscountAmount");
+  const orderDiscountAmount = numberValue(snapshot, "orderDiscountAmount", "OrderDiscountAmount");
+  const lines = arrayValue(snapshot, "lines", "Lines").map((value, index) => {
+    const line = asRecord(value);
+    const baseUnitPrice = numberValue(line, "originalUnitPrice", "OriginalUnitPrice", "baseUnitPrice", "BaseUnitPrice");
+    const unitPrice = numberValue(line, "flashSaleUnitPrice", "FlashSaleUnitPrice", "unitPrice", "UnitPrice", baseUnitPrice);
+    const sku = stringValue(line, "sku", "Sku");
+
+    return {
+      productId: stringValue(line, "productId", "ProductId", "variantId", "VariantId") || `${sku}-${index}`,
+      productName: stringValue(line, "productName", "ProductName", "name", "Name") || sku || "ไม่ระบุสินค้า",
+      quantity: numberValue(line, "quantity", "Quantity"),
+      originalUnitPrice: baseUnitPrice,
+      flashSaleUnitPrice: unitPrice < baseUnitPrice ? unitPrice : null,
+      lineTotal: numberValue(line, "lineTotal", "LineTotal", "total", "Total"),
+    };
+  });
+
+  return {
+    lines,
+    itemSubtotal: numberValue(snapshot, "itemSubtotal", "ItemSubtotal"),
+    shippingAmount: numberValue(snapshot, "shippingAmount", "ShippingAmount"),
+    shippingDiscountAmount: numberValue(snapshot, "shippingDiscountAmount", "ShippingDiscountAmount"),
+    couponDiscountAmount: explicitCouponDiscount ?? Math.max(0, orderDiscountAmount - promotionDiscountAmount),
+    promotionDiscountAmount,
+    appliedCoupons: arrayValue(snapshot, "appliedCoupons", "AppliedCoupons").map((value) => {
+      const coupon = asRecord(value);
+      return {
+        code: stringValue(coupon, "code", "Code") || undefined,
+        name: stringValue(coupon, "name", "Name") || undefined,
+        type: stringValue(coupon, "type", "Type") || undefined,
+        discountAmount: numberValue(coupon, "discountAmount", "DiscountAmount"),
+        shippingDiscountAmount: numberValue(coupon, "shippingDiscountAmount", "ShippingDiscountAmount"),
+      };
+    }),
+    vatAmount: numberValue(snapshot, "vatAmount", "VatAmount"),
+    grandTotal: numberValue(snapshot, "grandTotal", "GrandTotal"),
+    adjustments: arrayValue(snapshot, "adjustments", "Adjustments").map((value) => {
+      const adjustment = asRecord(value);
+      return {
+        type: stringValue(adjustment, "type", "Type"),
+        label: stringValue(adjustment, "label", "Label") || "รายการปรับราคา",
+        amount: numberValue(adjustment, "amount", "Amount"),
+      };
+    }),
+  };
+}
+
+function asRecord(value: unknown): UnknownRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as UnknownRecord
+    : {};
+}
+
+function arrayValue(record: UnknownRecord, ...keys: string[]) {
+  const value = keys.map((key) => record[key]).find(Array.isArray);
+  return Array.isArray(value) ? value : [];
+}
+
+function stringValue(record: UnknownRecord, ...keys: string[]) {
+  const value = keys.map((key) => record[key]).find((candidate) => typeof candidate === "string");
+  return typeof value === "string" ? value : "";
+}
+
+function numberValue(record: UnknownRecord, ...keysAndFallback: Array<string | number>) {
+  const fallback = typeof keysAndFallback.at(-1) === "number" ? keysAndFallback.pop() as number : 0;
+  const value = keysAndFallback
+    .map((key) => record[String(key)])
+    .find((candidate) => typeof candidate === "number" || (typeof candidate === "string" && candidate.trim() !== ""));
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function optionalNumberValue(record: UnknownRecord, ...keys: string[]) {
+  const value = keys
+    .map((key) => record[key])
+    .find((candidate) => typeof candidate === "number" || (typeof candidate === "string" && candidate.trim() !== ""));
+  if (value === undefined) return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
 }
 
 export function OrderPricingSnapshotDialog({
@@ -77,8 +164,6 @@ export function OrderPricingSnapshotDialog({
     if (!open) return;
 
     let active = true;
-    setLoading(true);
-    setError(null);
 
     void getPricingSnapshot(orderId)
       .then((data) => {
@@ -133,8 +218,8 @@ export function OrderPricingSnapshotDialog({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {snapshot.lines.map((line) => (
-                    <tr key={line.productId}>
+                  {snapshot.lines.map((line, index) => (
+                    <tr key={`${line.productId}-${index}`}>
                       <td className="px-3 py-2">{line.productName}</td>
                       <td className="px-3 py-2 text-right text-muted-foreground">
                         {line.flashSaleUnitPrice !== null ? (

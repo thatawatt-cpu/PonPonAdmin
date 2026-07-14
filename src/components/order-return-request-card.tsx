@@ -39,6 +39,8 @@ type ReturnRequest = {
 };
 
 type OrderReturnRequestCardProps = {
+  canManage: boolean;
+  canRefund: boolean;
   orderId: string;
   orderNumber: string;
   refundableAmount: number;
@@ -100,6 +102,8 @@ async function getReturnRequest(orderId: string) {
 }
 
 export function OrderReturnRequestCard({
+  canManage,
+  canRefund,
   orderId,
   orderNumber,
   refundableAmount,
@@ -165,6 +169,7 @@ export function OrderReturnRequestCard({
     status: "Approved" | "Rejected" | "Completed",
     noteOverride?: string,
   ) {
+    if (!canManage) return;
     const note = noteOverride?.trim() ?? adminNote.trim();
     if (!note) {
       setError("กรุณาระบุหมายเหตุจากแอดมิน");
@@ -205,6 +210,7 @@ export function OrderReturnRequestCard({
   }
 
   async function handleManualRefund(payload: ManualRefundPayload) {
+    if (!canRefund) return;
     const response = await fetch(
       `/api/backend/admin/orders/${orderId}/approve-manual-refund`,
       {
@@ -305,7 +311,7 @@ export function OrderReturnRequestCard({
           )}
         </div>
 
-        {isPending ? (
+        {isPending && canManage ? (
           <div className="space-y-3">
             <div>
               <label
@@ -377,16 +383,18 @@ export function OrderReturnRequestCard({
                 )}
 
                 <div className="flex flex-wrap justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    disabled={submitting}
-                    onClick={handleComplete}
-                  >
-                    <CheckCircle2 />
-                    {submitting ? "กำลังปิดรายการ..." : "ปิดรายการคืนสินค้า"}
-                  </Button>
+                  {canManage ? (
+                    <Button
+                      variant="outline"
+                      disabled={submitting}
+                      onClick={handleComplete}
+                    >
+                      <CheckCircle2 />
+                      {submitting ? "กำลังปิดรายการ..." : "ปิดรายการคืนสินค้า"}
+                    </Button>
+                  ) : null}
 
-                  {showManualRefundAction && !refundCompleted && (
+                  {canRefund && showManualRefundAction && !refundCompleted && (
                     <Button onClick={() => setRefundDialogOpen(true)}>
                       <Banknote />
                       ยืนยันคืนเงินแบบ Manual
@@ -399,7 +407,7 @@ export function OrderReturnRequestCard({
         )}
       </CardContent>
 
-      {refundDialogOpen && (
+      {canRefund && refundDialogOpen && (
         <ManualRefundDialog
           open
           orderNumber={orderNumber}

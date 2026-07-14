@@ -10,6 +10,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProductFilterBar } from "@/components/product-filter-bar";
 import { ProductGroupCard, type ProductGroup } from "@/components/product-group-card";
+import { PermissionGate } from "@/components/admin-permissions";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -65,7 +66,11 @@ export default async function ProductsPage({
         eyebrow="แค็ตตาล็อก"
         title="จัดการสินค้า"
         description="แก้ไขข้อมูลสินค้า ราคา รูปภาพ ตัวเลือก และสต็อกที่แสดงในหน้าร้าน"
-        action={<button className={buttonVariants()}>+ เพิ่มสินค้า</button>}
+        action={(
+          <PermissionGate permission="products.manage">
+            <button className={buttonVariants()}>+ เพิ่มสินค้า</button>
+          </PermissionGate>
+        )}
       />
 
       <Card>
@@ -207,4 +212,3 @@ function groupProductsBySku(products: AdminProduct[]): ProductGroup[] {
     products: groupedProducts.sort((a, b) => a.zortSku.localeCompare(b.zortSku)),
   }));
 }
-

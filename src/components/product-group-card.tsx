@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Package, Tag, CheckCircle, XCircle, Clock, Settings } from "lucide-react";
+import { hasPermission, useAdminSession } from "@/components/admin-permissions";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { AdminProduct } from "@/lib/admin-products";
@@ -18,6 +19,8 @@ function getGroupName(name: string) {
 }
 
 export function ProductGroupCard({ group }: { group: ProductGroup }) {
+  const { user } = useAdminSession();
+  const canManage = hasPermission(user, "products.manage");
   const primary = group.products[0];
   const variantImages = primary.variantImages.length
     ? primary.variantImages
@@ -125,10 +128,12 @@ export function ProductGroupCard({ group }: { group: ProductGroup }) {
               ขายแล้ว {totalSold.toLocaleString()} ชิ้น
             </p>
           </div>
-          <Link href={`/products/${primary.parentProductId ?? primary.id}/edit`} className={buttonVariants({ size: "sm" })}>
-            <Settings className="size-3.5" />
-            {isVariantGroup ? "จัดการ" : "แก้ไข"}
-          </Link>
+          {canManage ? (
+            <Link href={`/products/${primary.parentProductId ?? primary.id}/edit`} className={buttonVariants({ size: "sm" })}>
+              <Settings className="size-3.5" />
+              {isVariantGroup ? "จัดการ" : "แก้ไข"}
+            </Link>
+          ) : null}
         </div>
       </CardContent>
     </Card>

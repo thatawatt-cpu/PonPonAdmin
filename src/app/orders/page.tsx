@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { hasPermission, useAdminSession } from "@/components/admin-permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -259,6 +260,9 @@ export default function OrdersPage() {
 }
 
 function OrdersPageContent() {
+  const { user } = useAdminSession();
+  const canManage = hasPermission(user, "orders.manage");
+  const canSyncZort = hasPermission(user, "integrations.manage");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -424,6 +428,7 @@ function OrdersPageContent() {
   }
 
   async function handleSyncZort() {
+    if (!canSyncZort) return;
     setSyncing(true);
     setSyncMessage(null);
     try {
@@ -447,7 +452,7 @@ function OrdersPageContent() {
   }
 
   async function handleCancel(reason: string) {
-    if (!cancelTarget) return;
+    if (!cancelTarget || !canManage) return;
     setCancellingId(cancelTarget.id);
     setActionMessage(null);
     try {
@@ -492,16 +497,18 @@ function OrdersPageContent() {
             </span>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="lg"
-          onClick={handleSyncZort}
-          disabled={syncing}
-          className="w-full shrink-0 sm:w-auto"
-        >
-          <RefreshCw className={cn("size-4", syncing && "animate-spin")} />
-          {syncing ? "กำลังซิงก์..." : "ซิงก์ ZORT"}
-        </Button>
+        {canSyncZort ? (
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={handleSyncZort}
+            disabled={syncing}
+            className="w-full shrink-0 sm:w-auto"
+          >
+            <RefreshCw className={cn("size-4", syncing && "animate-spin")} />
+            {syncing ? "กำลังซิงก์..." : "ซิงก์ ZORT"}
+          </Button>
+        ) : null}
       </div>
 
       {(syncMessage || actionMessage) && (
@@ -635,6 +642,7 @@ function OrdersPageContent() {
               <OrdersDesktopTable
                 activeFilter={activeFilter}
                 allVisibleSelected={allVisibleSelected}
+                canManage={canManage}
                 cancellingId={cancellingId}
                 keyword={keyword}
                 loading={loading}
@@ -649,6 +657,7 @@ function OrdersPageContent() {
             <div className="md:hidden">
               <OrdersMobileList
                 activeFilter={activeFilter}
+                canManage={canManage}
                 cancellingId={cancellingId}
                 keyword={keyword}
                 loading={loading}
@@ -691,22 +700,25 @@ function OrdersPageContent() {
         )}
       </Card>
 
-      <OrderCancelDialog
-        open={cancelTarget !== null}
-        orderNumber={cancelTarget?.number}
-        customerName={cancelTarget?.customerName}
-        submitting={cancelTarget !== null && cancellingId === cancelTarget.id}
-        onOpenChange={(open) => {
-          if (!open) setCancelTarget(null);
-        }}
-        onConfirm={handleCancel}
-      />
+      {canManage ? (
+        <OrderCancelDialog
+          open={cancelTarget !== null}
+          orderNumber={cancelTarget?.number}
+          customerName={cancelTarget?.customerName}
+          submitting={cancelTarget !== null && cancellingId === cancelTarget.id}
+          onOpenChange={(open) => {
+            if (!open) setCancelTarget(null);
+          }}
+          onConfirm={handleCancel}
+        />
+      ) : null}
     </div>
   );
 }
 
 type OrdersListProps = {
   activeFilter: OrderFilter;
+  canManage: boolean;
   cancellingId: string | null;
   keyword: string;
   loading: boolean;
@@ -745,6 +757,7 @@ function OrderSelectionCheckbox({
 function OrdersDesktopTable({
   activeFilter,
   allVisibleSelected,
+  canManage,
   cancellingId,
   keyword,
   loading,
@@ -849,6 +862,7 @@ function OrdersDesktopTable({
               </td>
               <td className="px-4 py-3">
                 <OrderRowActions
+                  canManage={canManage}
                   cancelling={cancellingId === order.id}
                   onCancel={() => onCancel(order)}
                   order={order}
@@ -864,6 +878,7 @@ function OrdersDesktopTable({
 
 function OrdersMobileList({
   activeFilter,
+  canManage,
   cancellingId,
   keyword,
   loading,
@@ -945,6 +960,7 @@ function OrdersMobileList({
           ) : null}
           <div className="mt-4 border-t pt-3">
             <OrderRowActions
+              canManage={canManage}
               cancelling={cancellingId === order.id}
               onCancel={() => onCancel(order)}
               order={order}
@@ -986,11 +1002,13 @@ function OrderStatusStack({ order, compact = false }: { order: OrderListItem; co
 }
 
 function OrderRowActions({
+  canManage,
   cancelling,
   mobile = false,
   onCancel,
   order,
 }: {
+  canManage: boolean;
   cancelling: boolean;
   mobile?: boolean;
   onCancel: () => void;
@@ -1007,7 +1025,7 @@ function OrderRowActions({
       >
         ดูรายละเอียด <ArrowRight className="size-4" />
       </Link>
-      <DropdownMenu>
+      {canManage ? <DropdownMenu>
         <DropdownMenuTrigger
           render={
             <Button
@@ -1034,7 +1052,7 @@ function OrderRowActions({
             </DropdownMenuItem>
           ) : null}
         </DropdownMenuContent>
-      </DropdownMenu>
+      </DropdownMenu> : null}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Eye, KeyRound, RadioTower, RefreshCw, Save } from "lucide-react";
+import { hasPermission, useAdminSession } from "@/components/admin-permissions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,8 @@ type SaveState = {
 };
 
 export function IntegrationsSettingsForm() {
+  const { user } = useAdminSession();
+  const canManage = hasPermission(user, "integrations.manage");
   const [configs, setConfigs] = useState<IntegrationGroupConfig[]>([]);
   const [values, setValues] = useState<Record<string, Record<string, string>>>({});
   const [loading, setLoading] = useState(true);
@@ -277,6 +280,7 @@ export function IntegrationsSettingsForm() {
                             value={values[group]?.[field.key] ?? ""}
                             placeholder={field.isSecret && field.isConfigured ? SECRET_MASK : ""}
                             onChange={(event) => updateValue(group, field.key, event.target.value)}
+                            disabled={!canManage}
                           />
                           {field.isSecret ? (
                             <p className="text-xs leading-5 text-muted-foreground">
@@ -300,6 +304,12 @@ export function IntegrationsSettingsForm() {
                     }
                   >
                     {state.message}
+                  </p>
+                ) : null}
+
+                {!canManage ? (
+                  <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+                    บัญชีนี้ดูค่า Integration ได้ แต่ไม่มีสิทธิ์แก้ไขหรือบันทึก
                   </p>
                 ) : null}
 
@@ -330,7 +340,7 @@ export function IntegrationsSettingsForm() {
                         type="button"
                         variant="outline"
                         onClick={() => void registerZortWebhook()}
-                        disabled={webhookState.saving || config.fields.length === 0}
+                        disabled={!canManage || webhookState.saving || config.fields.length === 0}
                       >
                         {webhookState.saving ? <Spinner /> : <RadioTower />}
                         {webhookState.saving ? "กำลังลงทะเบียน..." : "ลงทะเบียน Webhook"}
@@ -340,7 +350,7 @@ export function IntegrationsSettingsForm() {
                   <Button
                     type="button"
                     onClick={() => saveGroup(group)}
-                    disabled={state?.saving || config.fields.length === 0}
+                    disabled={!canManage || state?.saving || config.fields.length === 0}
                   >
                     {state?.saving ? <Spinner /> : <Save />}
                     {state?.saving ? "กำลังบันทึก..." : `บันทึก ${group}`}

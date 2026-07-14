@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Banknote, CheckCircle2, Package, Receipt } from "lucide-react";
+import { hasPermission, useAdminSession } from "@/components/admin-permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -202,6 +203,9 @@ function OrderItemThumbnail({ item }: { item: OrderItem }) {
 }
 
 export default function OrderDetailPage() {
+  const { user } = useAdminSession();
+  const canManage = hasPermission(user, "orders.manage");
+  const canRefund = hasPermission(user, "orders.refund");
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = params.id;
@@ -261,7 +265,7 @@ export default function OrderDetailPage() {
   }, [id]);
 
   async function handleCancel(reason: string) {
-    if (!order) return;
+    if (!order || !canManage) return;
     setCancelling(true);
     try {
       const res = await fetch(`/api/backend/admin/orders/${id}/cancel`, {
@@ -281,6 +285,7 @@ export default function OrderDetailPage() {
   }
 
   async function handleManualRefund(payload: ManualRefundPayload) {
+    if (!canRefund) return;
     const response = await fetch(
       `/api/backend/admin/orders/${id}/approve-manual-refund`,
       {
@@ -364,7 +369,7 @@ export default function OrderDetailPage() {
             <Receipt />
             Pricing Snapshot
           </Button>
-          {canCancel && (
+          {canManage && canCancel && (
             <Button variant="destructive" size="sm" disabled={cancelling} onClick={() => setCancelDialogOpen(true)}>
               {cancelling ? "กำลังยกเลิก..." : "ยกเลิกออเดอร์"}
             </Button>
@@ -372,13 +377,15 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      <OrderCancelDialog
-        open={cancelDialogOpen}
-        orderNumber={order.number}
-        submitting={cancelling}
-        onOpenChange={setCancelDialogOpen}
-        onConfirm={handleCancel}
-      />
+      {canManage ? (
+        <OrderCancelDialog
+          open={cancelDialogOpen}
+          orderNumber={order.number}
+          submitting={cancelling}
+          onOpenChange={setCancelDialogOpen}
+          onConfirm={handleCancel}
+        />
+      ) : null}
 
       <OrderPricingSnapshotDialog
         orderId={id}
@@ -389,6 +396,8 @@ export default function OrderDetailPage() {
 
       {shouldShowReturnRequestCard && (
         <OrderReturnRequestCard
+          canManage={canManage}
+          canRefund={canRefund}
           orderId={id}
           orderNumber={order.number}
           refundableAmount={order.paymentAmount}
@@ -447,19 +456,19 @@ export default function OrderDetailPage() {
                 <CheckCircle2 className="size-4" />
                 ยืนยันการคืนเงินแบบ Manual เรียบร้อยแล้ว
               </div>
-            ) : (
+            ) : canRefund ? (
               <div className="flex justify-end">
                 <Button onClick={() => setRefundDialogOpen(true)}>
                   <Banknote />
                   ยืนยันคืนเงินแบบ Manual
                 </Button>
               </div>
-            )}
+            ) : null}
           </CardContent>
         </Card>
       )}
 
-      {refundDialogOpen && (
+      {canRefund && refundDialogOpen && (
         <ManualRefundDialog
           open
           orderNumber={order.number}

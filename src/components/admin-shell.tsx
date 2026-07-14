@@ -17,6 +17,15 @@ import {
   Users,
 } from "lucide-react";
 import {
+  AdminSessionProvider,
+  canAccessAdminPath,
+  firstAccessiblePath,
+  hasAnyPermission,
+  hasPermission,
+  type AdminPermission,
+  type AdminSessionUser,
+} from "@/components/admin-permissions";
+import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
@@ -46,14 +55,19 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-const navItems = [
-  { href: "/", label: "แดชบอร์ด", icon: LayoutDashboard },
-  { href: "/orders", label: "ออเดอร์", icon: ShoppingCart },
-  { href: "/products", label: "สินค้า", icon: Package },
-  { href: "/reviews", label: "รีวิว", icon: MessageSquareText },
-  { href: "/integrations/zort", label: "ซิงก์ ZORT", icon: RefreshCw },
-  { href: "/home-slides", label: "สไลด์หน้าแรก", icon: SlidersHorizontal },
-  { href: "/customers", label: "ลูกค้า", icon: Users },
+const navItems: Array<{
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  permission: AdminPermission;
+}> = [
+  { href: "/", label: "แดชบอร์ด", icon: LayoutDashboard, permission: "dashboard.read" },
+  { href: "/orders", label: "ออเดอร์", icon: ShoppingCart, permission: "orders.read" },
+  { href: "/products", label: "สินค้า", icon: Package, permission: "products.read" },
+  { href: "/reviews", label: "รีวิว", icon: MessageSquareText, permission: "reviews.manage" },
+  { href: "/integrations/zort", label: "ซิงก์ ZORT", icon: RefreshCw, permission: "integrations.read" },
+  { href: "/home-slides", label: "สไลด์หน้าแรก", icon: SlidersHorizontal, permission: "marketing.manage" },
+  { href: "/customers", label: "ลูกค้า", icon: Users, permission: "customers.read" },
 ];
 
 const marketingItems = [
@@ -97,19 +111,13 @@ const linkableBreadcrumbHrefs = new Set([
   "/settings",
 ]);
 
-type CurrentAdmin = {
-  displayName?: string;
-  email?: string;
-  role?: string;
-  userId?: string;
-};
-
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
   const [marketingOpen, setMarketingOpen] = useState(true);
-  const [currentAdmin, setCurrentAdmin] = useState<CurrentAdmin | null>(null);
+  const [currentAdmin, setCurrentAdmin] = useState<AdminSessionUser | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userMenuRect, setUserMenuRect] = useState<DOMRect | null>(null);
   const footerRef = useRef<HTMLDivElement>(null);
@@ -139,9 +147,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         }
 
         if (!response.ok) return;
-        setCurrentAdmin((await response.json()) as CurrentAdmin);
+        setCurrentAdmin((await response.json()) as AdminSessionUser);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
+      } finally {
+        if (!controller.signal.aborted) setProfileLoading(false);
       }
     }
 
@@ -172,6 +182,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <AdminSessionProvider loading={profileLoading} user={currentAdmin}>
     <TooltipProvider>
       <SidebarProvider>
         <Sidebar collapsible="icon">
@@ -202,7 +213,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <SidebarGroupLabel>เมนูหลัก</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {navItems.map((item) => {
+                  {navItems.filter((item) => hasPermission(currentAdmin, item.permission)).map((item) => {
                     const active =
                       item.href === "/"
                         ? pathname === "/"
@@ -221,7 +232,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                     );
                   })}
 
-                  <SidebarMenuItem>
+                  {hasPermission(currentAdmin, "marketing.manage") ? <SidebarMenuItem>
                     <SidebarMenuButton
                       type="button"
                       onClick={() => setMarketingOpen((open) => !open)}
@@ -256,9 +267,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                         })}
                       </SidebarMenuSub>
                     ) : null}
-                  </SidebarMenuItem>
+                  </SidebarMenuItem> : null}
 
-                  <SidebarMenuItem>
+                  {hasAnyPermission(currentAdmin, ["settings.manage", "integrations.read", "admin_users.read"]) ? <SidebarMenuItem>
                     <SidebarMenuButton
                       render={<Link href="/settings" />}
                       isActive={pathname.startsWith("/settings")}
@@ -267,7 +278,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       <Settings strokeWidth={1.5} />
                       <span>ตั้งค่า</span>
                     </SidebarMenuButton>
-                  </SidebarMenuItem>
+                  </SidebarMenuItem> : null}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -367,11 +378,47 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <div className={fullBleed ? "border-b border-border px-4 py-3 sm:px-6" : "mb-5"}>
               <AdminBreadcrumb pathname={pathname} />
             </div>
-            {children}
+            {profileLoading ? (
+              <PagePermissionLoading />
+            ) : canAccessAdminPath(currentAdmin, pathname) ? (
+              children
+            ) : (
+              <PermissionDenied user={currentAdmin} />
+            )}
           </div>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
+    </AdminSessionProvider>
+  );
+}
+
+function PagePermissionLoading() {
+  return (
+    <div className="space-y-4" aria-label="กำลังตรวจสอบสิทธิ์">
+      <div className="h-8 w-48 animate-pulse rounded-md bg-muted" />
+      <div className="h-32 w-full animate-pulse rounded-lg bg-muted" />
+    </div>
+  );
+}
+
+function PermissionDenied({ user }: { user: AdminSessionUser | null }) {
+  const fallbackPath = firstAccessiblePath(user);
+  return (
+    <div className="flex min-h-[55vh] flex-col items-center justify-center rounded-xl border border-dashed border-border px-6 text-center">
+      <div className="grid size-12 place-items-center rounded-full bg-amber-100 text-amber-700">
+        <Settings className="size-5" />
+      </div>
+      <h1 className="mt-4 text-xl font-black">ไม่มีสิทธิ์เข้าถึงหน้านี้</h1>
+      <p className="mt-2 max-w-md text-sm text-muted-foreground">
+        บัญชีของคุณยังไม่ได้รับสิทธิ์สำหรับหน้านี้ กรุณาติดต่อ Owner เพื่อขอสิทธิ์เพิ่มเติม
+      </p>
+      {fallbackPath ? (
+        <Link href={fallbackPath} className="mt-5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+          กลับไปหน้าที่ใช้งานได้
+        </Link>
+      ) : null}
+    </div>
   );
 }
 

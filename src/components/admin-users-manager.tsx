@@ -449,14 +449,20 @@ function UserEditorDialog({ mode, open, user, currentAdmin, onOpenChange, onSave
   const ownerLocked = currentAdmin?.role !== "Owner";
 
   function setRole(nextRole: AdminRole) {
-    setForm((current) => ({
-      ...current,
-      role: nextRole,
-      permissions:
-        nextRole === "Owner" || nextRole === "Admin"
-          ? allPermissions
-          : current.permissions,
-    }));
+    setForm((current) => {
+      const enteringStaff = nextRole === "Staff" && current.role !== "Staff";
+
+      return {
+        ...current,
+        role: nextRole,
+        permissions:
+          nextRole === "Owner" || nextRole === "Admin"
+            ? allPermissions
+            : enteringStaff
+              ? []
+              : current.permissions,
+      };
+    });
   }
 
   function togglePermission(permission: Permission) {

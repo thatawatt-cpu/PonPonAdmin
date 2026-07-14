@@ -2,12 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { hasPermission, useAdminSession } from "@/components/admin-permissions";
 import { Button } from "@/components/ui/button";
 
 export function ZortSyncButton() {
+  const { user } = useAdminSession();
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+
+  if (!hasPermission(user, "integrations.manage")) return null;
 
   async function syncProducts() {
     setLoading(true);

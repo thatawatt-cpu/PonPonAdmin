@@ -20,15 +20,22 @@ export type AdminReview = {
   id: string;
   productId: string;
   productName: string;
+  productImageUrl: string | null;
   userId: string;
   userName: string;
+  userAvatarUrl: string | null;
+  orderId: string;
+  orderNumber: string;
+  sku: string;
   rating: number;
   comment: string;
   status: ReviewStatus;
   isDeleted: boolean;
   createdAt: string | null;
   updatedAt: string | null;
+  editedAt: string | null;
   deletedAt: string | null;
+  actionHistory: unknown[];
   media: AdminReviewMedia[];
 };
 
@@ -57,11 +64,36 @@ type ApiReview = {
   reviewId?: string | null;
   productId?: string | null;
   productName?: string | null;
-  product?: { id?: string | null; name?: string | null } | null;
+  product?: {
+    id?: string | null;
+    name?: string | null;
+    imageUrl?: string | null;
+    thumbnailUrl?: string | null;
+  } | null;
+  productImageUrl?: string | null;
   userId?: string | null;
   userName?: string | null;
   userDisplayName?: string | null;
-  user?: { id?: string | null; name?: string | null; displayName?: string | null } | null;
+  user?: {
+    id?: string | null;
+    name?: string | null;
+    displayName?: string | null;
+    pictureUrl?: string | null;
+    avatarUrl?: string | null;
+  } | null;
+  customer?: {
+    id?: string | null;
+    customerId?: string | null;
+    name?: string | null;
+    displayName?: string | null;
+    pictureUrl?: string | null;
+    avatarUrl?: string | null;
+  } | null;
+  order?: { id?: string | null; orderId?: string | null; number?: string | null; orderNumber?: string | null } | null;
+  orderItem?: { sku?: string | null; variantCode?: string | null } | null;
+  orderId?: string | null;
+  orderNumber?: string | null;
+  sku?: string | null;
   rating?: number | string | null;
   comment?: string | null;
   content?: string | null;
@@ -70,7 +102,13 @@ type ApiReview = {
   isDeleted?: boolean | null;
   deletedAt?: string | null;
   createdAt?: string | null;
+  createdAtUtc?: string | null;
   updatedAt?: string | null;
+  updatedAtUtc?: string | null;
+  editedAt?: string | null;
+  editedAtUtc?: string | null;
+  deletedAtUtc?: string | null;
+  actionHistory?: unknown[] | null;
   media?: ApiReviewMedia[] | null;
   medias?: ApiReviewMedia[] | null;
 };
@@ -181,30 +219,46 @@ function buildReviewQuery(filters: AdminReviewFilters) {
 
 function normalizeReview(review: ApiReview): AdminReview {
   const productId = review.productId ?? review.product?.id ?? "";
-  const userId = review.userId ?? review.user?.id ?? "";
-  const productName = review.productName ?? review.product?.name ?? productId;
+  const userId = review.userId ?? review.customer?.customerId ?? review.customer?.id ?? review.user?.id ?? "";
+  const productName = review.product?.name ?? review.productName ?? productId;
   const userName =
-    review.userName ??
-    review.userDisplayName ??
+    review.customer?.displayName ??
+    review.customer?.name ??
     review.user?.displayName ??
     review.user?.name ??
+    review.userDisplayName ??
+    review.userName ??
     userId;
   const status = review.status === "hidden" ? "hidden" : "published";
-  const deletedAt = review.deletedAt ?? null;
+  const deletedAt = review.deletedAtUtc ?? review.deletedAt ?? null;
 
   return {
     id: review.id ?? review.reviewId ?? "",
     productId,
     productName: productName || "-",
+    productImageUrl: normalizeMediaUrl(
+      review.productImageUrl ?? review.product?.imageUrl ?? review.product?.thumbnailUrl,
+    ),
     userId,
     userName: userName || "-",
+    userAvatarUrl: normalizeMediaUrl(
+      review.customer?.pictureUrl ??
+        review.customer?.avatarUrl ??
+        review.user?.pictureUrl ??
+        review.user?.avatarUrl,
+    ),
+    orderId: review.orderId ?? review.order?.orderId ?? review.order?.id ?? "",
+    orderNumber: review.orderNumber ?? review.order?.orderNumber ?? review.order?.number ?? "",
+    sku: review.sku ?? review.orderItem?.sku ?? review.orderItem?.variantCode ?? "",
     rating: positiveInteger(review.rating, 0),
     comment: review.comment ?? review.content ?? review.body ?? "",
     status,
     isDeleted: review.isDeleted ?? Boolean(deletedAt),
-    createdAt: review.createdAt ?? null,
-    updatedAt: review.updatedAt ?? null,
+    createdAt: review.createdAtUtc ?? review.createdAt ?? null,
+    updatedAt: review.updatedAtUtc ?? review.updatedAt ?? null,
+    editedAt: review.editedAtUtc ?? review.editedAt ?? null,
     deletedAt,
+    actionHistory: review.actionHistory ?? [],
     media: (review.media ?? review.medias ?? []).map(normalizeMedia),
   };
 }

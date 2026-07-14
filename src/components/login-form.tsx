@@ -119,7 +119,7 @@ export function LoginForm() {
         return;
       }
 
-      router.push("/");
+      router.push(loginDestination());
       router.refresh();
     } catch {
       setError("ยังเชื่อมต่อระบบหลังบ้านไม่ได้ กรุณาตรวจสอบว่า backend เปิดอยู่ แล้วลองอีกครั้ง");
@@ -274,6 +274,16 @@ function login(email: string, password: string) {
     headers: { "content-type": "application/json" },
     method: "POST",
   });
+}
+
+function loginDestination() {
+  const nextPath = new URLSearchParams(window.location.search).get("next");
+
+  if (nextPath?.startsWith("/") && !nextPath.startsWith("//")) {
+    return nextPath;
+  }
+
+  return "/";
 }
 
 async function registerFirstAdmin(payload: {

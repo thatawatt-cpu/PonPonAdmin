@@ -506,6 +506,9 @@ function UserEditorDialog({ mode, open, user, currentAdmin, onOpenChange, onSave
         method: mode === "create" ? "POST" : "PATCH",
       });
       if (!response.ok) throw await apiError(response, "บันทึกผู้ดูแลไม่สำเร็จ");
+      if (mode === "edit" && targetUser?.id === currentAdmin?.userId) {
+        window.dispatchEvent(new Event("admin-profile-updated"));
+      }
       onOpenChange(false);
       onSaved();
 

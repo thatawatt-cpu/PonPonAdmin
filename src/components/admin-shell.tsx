@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronUp,
   LayoutDashboard,
@@ -97,11 +97,19 @@ const linkableBreadcrumbHrefs = new Set([
   "/settings",
 ]);
 
+type CurrentAdmin = {
+  displayName?: string;
+  email?: string;
+  role?: string;
+  userId?: string;
+};
+
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
   const [marketingOpen, setMarketingOpen] = useState(true);
+  const [currentAdmin, setCurrentAdmin] = useState<CurrentAdmin | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userMenuRect, setUserMenuRect] = useState<DOMRect | null>(null);
   const footerRef = useRef<HTMLDivElement>(null);
@@ -109,6 +117,42 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const marketingActive = marketingItems.some((item) =>
     pathname.startsWith(item.href),
   );
+  const adminName = currentAdmin?.displayName?.trim() || "ผู้ดูแล";
+  const adminRole = currentAdmin?.role || "ผู้ดูแลระบบ";
+  const adminInitials = getInitials(adminName);
+
+  useEffect(() => {
+    if (pathname === "/login") return;
+    const controller = new AbortController();
+
+    async function loadCurrentAdmin() {
+      try {
+        const response = await fetch("/api/backend/admin/auth/me", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        if (response.status === 401) {
+          router.replace("/login");
+          router.refresh();
+          return;
+        }
+
+        if (!response.ok) return;
+        setCurrentAdmin((await response.json()) as CurrentAdmin);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    }
+
+    void loadCurrentAdmin();
+    window.addEventListener("admin-profile-updated", loadCurrentAdmin);
+
+    return () => {
+      controller.abort();
+      window.removeEventListener("admin-profile-updated", loadCurrentAdmin);
+    };
+  }, [pathname, router]);
 
   if (pathname === "/login") {
     return <>{children}</>;
@@ -247,11 +291,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       >
                         <div className="flex items-center gap-3 px-3 py-2.5">
                           <div className="grid size-9 shrink-0 place-items-center rounded-full bg-foreground text-sm font-bold text-background">
-                            A
+                            {adminInitials}
                           </div>
-                          <div className="grid text-sm leading-tight">
-                            <span className="font-semibold">ผู้ดูแล</span>
-                            <span className="text-xs text-muted-foreground">ผู้ดูแลระบบ</span>
+                          <div className="grid min-w-0 text-sm leading-tight">
+                            <span className="truncate font-semibold">{adminName}</span>
+                            <span className="truncate text-xs text-muted-foreground">
+                              {currentAdmin?.email || adminRole}
+                            </span>
+                            {currentAdmin?.email ? (
+                              <span className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
+                                {adminRole}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                         <div className="h-px bg-border" />
@@ -279,13 +330,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   >
                     <div className="relative size-8 shrink-0">
                       <div className="grid size-8 place-items-center rounded-full bg-foreground text-xs font-bold text-background shadow-sm">
-                        A
+                        {adminInitials}
                       </div>
                       <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-sidebar bg-emerald-400" />
                     </div>
                     <div className="grid flex-1 text-left text-sm leading-tight">
-                      <span className="truncate font-semibold">ผู้ดูแล</span>
-                      <span className="truncate text-xs text-sidebar-foreground/60">ผู้ดูแลระบบ</span>
+                      <span className="truncate font-semibold">{adminName}</span>
+                      <span className="truncate text-xs text-sidebar-foreground/60">{adminRole}</span>
                     </div>
                     <ChevronUp
                       strokeWidth={1.5}
@@ -377,4 +428,11 @@ function getBreadcrumbLabel(segment: string, segments: string[], index: number) 
   if (index > 0 && segments[index - 1] === "orders") return "รายละเอียดออเดอร์";
   if (index > 0 && segment !== "new" && segment !== "edit") return "รายละเอียด";
   return breadcrumbLabels[segment] ?? decodeURIComponent(segment);
+}
+
+function getInitials(value: string) {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "A";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0]}${words[1][0]}`.toUpperCase();
 }

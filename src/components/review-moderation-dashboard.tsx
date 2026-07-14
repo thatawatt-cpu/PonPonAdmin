@@ -391,7 +391,7 @@ function ReviewCard({ review, checked, disabled, onChecked, onDetail, onMedia, o
               {!review.orderNumber && !review.sku ? <span>ไม่มีข้อมูลออเดอร์เพิ่มเติม</span> : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {review.productId ? <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={`/products/${review.productId}`} />}><Package />ดูสินค้า</Button> : null}
+              {review.productSlug ? <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={`/products/${review.productSlug}`} />}><Package />ดูสินค้า</Button> : null}
               {review.orderId ? <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={`/orders/${review.orderId}`} />}><ShoppingBag />ดูออเดอร์</Button> : null}
               {!review.isDeleted ? <Button variant="outline" size="sm" disabled={disabled} onClick={() => onStatus(review.status === "published" ? "hidden" : "published")}>{review.status === "published" ? <EyeOff /> : <Eye />}{review.status === "published" ? "ซ่อนจากหน้าร้าน" : "เผยแพร่บนหน้าร้าน"}</Button> : null}
               <ReviewOverflow review={review} onDetail={onDetail} onDelete={onDelete} />
@@ -431,7 +431,7 @@ function MediaThumbnail({ media, productName, index }: { media: AdminReviewMedia
 }
 
 function ReviewOverflow({ review, onDetail, onDelete }: { review: AdminReview; onDetail: () => void; onDelete: () => void }) {
-  return <DropdownMenu><DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`คำสั่งเพิ่มเติมสำหรับรีวิวของ ${review.userName}`} />}><MoreHorizontal /></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48"><DropdownMenuItem onClick={onDetail}><MessageSquareText />ดูรายละเอียด</DropdownMenuItem>{review.productId ? <DropdownMenuItem render={<Link href={`/products/${review.productId}`} />}><Package />ดูสินค้า</DropdownMenuItem> : null}{review.orderId ? <DropdownMenuItem render={<Link href={`/orders/${review.orderId}`} />}><ShoppingBag />ดูออเดอร์</DropdownMenuItem> : null}<DropdownMenuItem onClick={() => void navigator.clipboard.writeText(review.id)}><Copy />คัดลอก Review ID</DropdownMenuItem>{!review.isDeleted ? <><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={onDelete}><Trash2 />ลบรีวิว</DropdownMenuItem></> : null}</DropdownMenuContent></DropdownMenu>;
+  return <DropdownMenu><DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`คำสั่งเพิ่มเติมสำหรับรีวิวของ ${review.userName}`} />}><MoreHorizontal /></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48"><DropdownMenuItem onClick={onDetail}><MessageSquareText />ดูรายละเอียด</DropdownMenuItem>{review.productSlug ? <DropdownMenuItem render={<Link href={`/products/${review.productSlug}`} />}><Package />ดูสินค้า</DropdownMenuItem> : null}{review.orderId ? <DropdownMenuItem render={<Link href={`/orders/${review.orderId}`} />}><ShoppingBag />ดูออเดอร์</DropdownMenuItem> : null}<DropdownMenuItem onClick={() => void navigator.clipboard.writeText(review.id)}><Copy />คัดลอก Review ID</DropdownMenuItem>{!review.isDeleted ? <><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={onDelete}><Trash2 />ลบรีวิว</DropdownMenuItem></> : null}</DropdownMenuContent></DropdownMenu>;
 }
 
 function BulkToolbar({ count, disabled, onClear, onStatus }: { count: number; disabled: boolean; onClear: () => void; onStatus: (status: ReviewStatus) => void }) {

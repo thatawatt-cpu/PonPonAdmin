@@ -19,6 +19,7 @@ export type AdminReviewMedia = {
 export type AdminReview = {
   id: string;
   productId: string;
+  productSlug: string;
   productName: string;
   productImageUrl: string | null;
   userId: string;
@@ -63,9 +64,11 @@ type ApiReview = {
   id?: string | null;
   reviewId?: string | null;
   productId?: string | null;
+  productSlug?: string | null;
   productName?: string | null;
   product?: {
     id?: string | null;
+    slug?: string | null;
     name?: string | null;
     imageUrl?: string | null;
     thumbnailUrl?: string | null;
@@ -219,6 +222,7 @@ function buildReviewQuery(filters: AdminReviewFilters) {
 
 function normalizeReview(review: ApiReview): AdminReview {
   const productId = review.productId ?? review.product?.id ?? "";
+  const productSlug = review.productSlug ?? review.product?.slug ?? "";
   const userId = review.userId ?? review.customer?.customerId ?? review.customer?.id ?? review.user?.id ?? "";
   const productName = review.product?.name ?? review.productName ?? productId;
   const userName =
@@ -235,6 +239,7 @@ function normalizeReview(review: ApiReview): AdminReview {
   return {
     id: review.id ?? review.reviewId ?? "",
     productId,
+    productSlug,
     productName: productName || "-",
     productImageUrl: normalizeMediaUrl(
       review.productImageUrl ?? review.product?.imageUrl ?? review.product?.thumbnailUrl,

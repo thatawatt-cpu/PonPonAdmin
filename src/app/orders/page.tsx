@@ -73,24 +73,19 @@ type OrderFilter = {
   paymentStatus?: string;
   returnRequestStatus?: string;
   refundRequestStatus?: string;
+  afterSales?: boolean;
 };
 
 const ORDER_FILTERS: OrderFilter[] = [
   { key: "all", label: "ทั้งหมด" },
-  { key: "pending-payment", label: "รอตรวจสลิป", paymentStatus: "Pending" },
   { key: "packing", label: "แพ็กแล้ว", status: "Packed" },
   { key: "shipped", label: "จัดส่งแล้ว", status: "Shipping" },
   { key: "completed", label: "สำเร็จ", status: "Success" },
   { key: "cancelled", label: "ยกเลิก", status: "Voided" },
   {
-    key: "return-requests",
-    label: "คืนสินค้า",
-    returnRequestStatus: "Requested",
-  },
-  {
-    key: "refund-requests",
-    label: "รีฟันด์",
-    refundRequestStatus: "manual_refund_pending",
+    key: "returns-refunds",
+    label: "คืนสินค้า/คืนเงิน",
+    afterSales: true,
   },
 ];
 
@@ -183,8 +178,20 @@ function paymentStatusClass(status: string) {
 }
 
 function canCancelOrder(order: OrderListItem) {
+  if (isRefundCompleted(order)) return false;
   const status = orderStatusLabel(order.status);
   return status !== "ยกเลิก" && status !== "สำเร็จ";
+}
+
+function isRefundCompleted(order: OrderListItem) {
+  const status = order.refundRequestStatus?.trim().toLowerCase();
+  return [
+    "manual_refunded",
+    "manual_refund_completed",
+    "manual_refund_succeeded",
+    "refunded",
+    "completed",
+  ].includes(status ?? "");
 }
 
 function getActiveFilter(searchParams: { get(name: string): string | null }) {
@@ -197,12 +204,13 @@ function getActiveFilter(searchParams: { get(name: string): string | null }) {
         (filter.returnRequestStatus &&
           filter.returnRequestStatus === searchParams.get("returnRequestStatus")) ||
         (filter.refundRequestStatus &&
-          filter.refundRequestStatus === searchParams.get("refundRequestStatus")),
+          filter.refundRequestStatus === searchParams.get("refundRequestStatus")) ||
+        (filter.afterSales && searchParams.get("afterSales") === "true"),
     ) ?? ORDER_FILTERS[0]
   );
 }
 
-async function getOrders(keyword: string, filter: OrderFilter, page: number) {
+async function getOrdersPage(keyword: string, filter: OrderFilter, page: number) {
   const params = new URLSearchParams();
   if (keyword) params.set("keyword", keyword);
   if (filter.status) params.set("status", filter.status);
@@ -219,6 +227,82 @@ async function getOrders(keyword: string, filter: OrderFilter, page: number) {
   const response = await fetch(`/api/backend/admin/orders?${params}`);
   if (!response.ok) throw new Error("fetch failed");
   return normalizeOrdersResponse(await response.json());
+}
+
+async function getCancelledOrders(keyword: string, filter: OrderFilter, page: number) {
+  const requiredItemCount = page * PAGE_SIZE;
+  const visibleOrders: OrderListItem[] = [];
+  let sourcePage = 1;
+  let sourceHasMore = true;
+
+  while (sourceHasMore && visibleOrders.length < requiredItemCount) {
+    const result = await getOrdersPage(keyword, filter, sourcePage);
+    visibleOrders.push(...result.items.filter((order) => !isRefundCompleted(order)));
+    sourceHasMore = pageHasMore(result, sourcePage);
+    sourcePage += 1;
+  }
+
+  const offset = (page - 1) * PAGE_SIZE;
+  return {
+    items: visibleOrders.slice(offset, offset + PAGE_SIZE),
+    totalItems: sourceHasMore ? requiredItemCount + 1 : visibleOrders.length,
+  };
+}
+
+async function getOrders(keyword: string, filter: OrderFilter, page: number) {
+  if (!filter.afterSales) {
+    if (filter.status?.trim().toLowerCase() === "voided") {
+      return getCancelledOrders(keyword, filter, page);
+    }
+    return getOrdersPage(keyword, filter, page);
+  }
+
+  const pages = Array.from({ length: page }, (_, index) => index + 1);
+  const [returnPages, refundPages] = await Promise.all([
+    Promise.all(
+      pages.map((currentPage) =>
+        getOrdersPage(
+          keyword,
+          { key: "return-requests", label: filter.label, returnRequestStatus: "Requested" },
+          currentPage,
+        ),
+      ),
+    ),
+    Promise.all(
+      pages.map((currentPage) =>
+        getOrdersPage(
+          keyword,
+          { key: "refunded", label: filter.label, refundRequestStatus: "manual_refunded" },
+          currentPage,
+        ),
+      ),
+    ),
+  ]);
+
+  const mergedOrders = new Map<string, OrderListItem>();
+  for (const result of [...returnPages, ...refundPages]) {
+    for (const order of result.items) mergedOrders.set(order.id, order);
+  }
+
+  const sortedOrders = [...mergedOrders.values()].sort(
+    (left, right) => new Date(right.orderDate).getTime() - new Date(left.orderDate).getTime(),
+  );
+  const offset = (page - 1) * PAGE_SIZE;
+  const returnTotal = returnPages.find((result) => result.totalItems !== null)?.totalItems;
+  const refundTotal = refundPages.find((result) => result.totalItems !== null)?.totalItems;
+  const loadedItemCount = [...returnPages, ...refundPages].reduce(
+    (total, result) => total + result.items.length,
+    0,
+  );
+  const duplicateCount = loadedItemCount - mergedOrders.size;
+
+  return {
+    items: sortedOrders.slice(offset, offset + PAGE_SIZE),
+    totalItems:
+      returnTotal !== null && returnTotal !== undefined && refundTotal !== null && refundTotal !== undefined
+        ? Math.max(0, returnTotal + refundTotal - duplicateCount)
+        : null,
+  };
 }
 
 function normalizeOrdersResponse(value: unknown): OrdersPageData {
@@ -368,6 +452,7 @@ function OrdersPageContent() {
     params.delete("paymentStatus");
     params.delete("returnRequestStatus");
     params.delete("refundRequestStatus");
+    params.delete("afterSales");
     params.delete("page");
 
     if (filter.status) params.set("status", filter.status);
@@ -378,6 +463,7 @@ function OrdersPageContent() {
     if (filter.refundRequestStatus) {
       params.set("refundRequestStatus", filter.refundRequestStatus);
     }
+    if (filter.afterSales) params.set("afterSales", "true");
 
     setLoading(true);
     setPendingFilterKey(filter.key);
@@ -982,6 +1068,15 @@ function StatusBadge({ className, label }: { className: string; label: string })
 }
 
 function OrderStatusStack({ order, compact = false }: { order: OrderListItem; compact?: boolean }) {
+  if (isRefundCompleted(order)) {
+    return (
+      <StatusBadge
+        className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+        label="คืนเงินสำเร็จ"
+      />
+    );
+  }
+
   return (
     <div className={cn("flex gap-1.5", compact ? "flex-row flex-wrap" : "flex-col items-start")}>
       <StatusBadge className={statusClass(order.status)} label={orderStatusLabel(order.status)} />
@@ -1102,6 +1197,10 @@ function OrdersLoadError({ onRetry }: { onRetry: () => void }) {
 }
 
 function orderPriorityClass(order: OrderListItem) {
+  if (isRefundCompleted(order)) {
+    return "border-l-emerald-500";
+  }
+
   if (order.returnRequestStatus === "Requested" || order.refundRequestStatus === "manual_refund_pending") {
     return "border-l-red-500";
   }

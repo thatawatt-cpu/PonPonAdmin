@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Banknote, CheckCircle2, Package, Receipt } from "lucide-react";
+import { ArrowLeft, Banknote, Package, Receipt } from "lucide-react";
 import { hasPermission, useAdminSession } from "@/components/admin-permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -144,6 +144,7 @@ function isManualRefundCompleted(order: OrderDetail) {
 }
 
 const refundCompletedStatusSet = new Set([
+  "manual_refunded",
   "manual_refund_approved",
   "manual_refund_completed",
   "manual_refund_succeeded",
@@ -152,6 +153,23 @@ const refundCompletedStatusSet = new Set([
   "succeeded",
   "successful",
 ]);
+
+function refundActorLabel(value: string | null) {
+  if (!value) return "ไม่ระบุ";
+  if (value.trim().toLowerCase() === "adminmanualrefund") return "ผู้ดูแลระบบ";
+  return value;
+}
+
+function RefundFact({ label, value, emphasized = false }: { label: string; value: React.ReactNode; emphasized?: boolean }) {
+  return (
+    <div className="min-w-0 border-t border-border/70 pt-3">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <div className={`mt-1 break-words text-sm leading-6 ${emphasized ? "text-lg font-black tabular-nums text-emerald-700 dark:text-emerald-300" : "font-semibold"}`}>
+        {value || "ไม่ระบุ"}
+      </div>
+    </div>
+  );
+}
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   if (!value && value !== 0) return null;
@@ -320,13 +338,14 @@ export default function OrderDetailPage() {
     );
   }
 
-  const isCanceled = isCanceledStatus(order.status);
-  const canCancel = !isCanceled && order.status !== "สำเร็จ";
   const currency = order.currency ?? "THB";
   const isManualRefundPending =
     order.omiseRefundStatus === "manual_refund_pending";
   const manualRefundCompleted =
     refundCompleted || isManualRefundCompleted(order);
+  const isCanceled = isCanceledStatus(order.status);
+  const canCancel = !manualRefundCompleted && !isCanceled && order.status !== "สำเร็จ";
+  const displayStatus = manualRefundCompleted ? "คืนเงินสำเร็จ" : order.status;
   const shouldShowManualRefundCard =
     isManualRefundPending || manualRefundCompleted;
   const shouldShowReturnRequestCard =
@@ -352,9 +371,9 @@ export default function OrderDetailPage() {
           <div className="mt-1.5 flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-black tracking-tight">{order.number}</h1>
             <span
-              className={`inline-flex h-7 items-center rounded-full px-3 text-sm font-semibold ${statusClass(order.status)}`}
+              className={`inline-flex h-7 items-center rounded-full px-3 text-sm font-semibold ${statusClass(displayStatus)}`}
             >
-              {order.status}
+              {displayStatus}
             </span>
             {order.isCod && (
               <span className="inline-flex h-7 items-center rounded-full bg-orange-100 px-3 text-sm font-semibold text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
@@ -408,13 +427,13 @@ export default function OrderDetailPage() {
 
       {shouldShowManualRefundCard && (
         <Card
-          className={
+          className={`overflow-hidden ${
             manualRefundCompleted
-              ? "border-green-200 dark:border-green-900/60"
+              ? "border-emerald-200 bg-emerald-50/20 dark:border-emerald-900/60 dark:bg-emerald-950/10"
               : "border-blue-200 dark:border-blue-900/60"
-          }
+          }`}
         >
-          <CardHeader className="flex flex-row items-start justify-between gap-4 pb-0 pt-5">
+          <CardHeader className="flex flex-col items-start gap-3 pb-0 pt-5 sm:flex-row sm:justify-between">
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2 text-base font-bold">
                 <Banknote
@@ -424,10 +443,10 @@ export default function OrderDetailPage() {
                       : "size-4 text-blue-600"
                   }
                 />
-                คำขอคืนเงินแบบ Manual
+                การคืนเงินแบบ Manual
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                ตรวจจากสถานะ omiseRefundStatus ในรายละเอียดออเดอร์
+                รายละเอียดการคืนเงินและผู้ดำเนินการ
               </p>
             </div>
             <span
@@ -441,22 +460,21 @@ export default function OrderDetailPage() {
             </span>
           </CardHeader>
           <CardContent className="space-y-4 px-5 pb-5">
-            <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-              <InfoRow label="สถานะ Refund" value={order.omiseRefundStatus} />
-              <InfoRow
-                label="ยอดคืนแล้ว"
-                value={`฿${fmtMoney(order.refundedAmount ?? 0, currency)}`}
+            <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
+              <RefundFact
+                label="สถานะ"
+                value={manualRefundCompleted ? "คืนเงินสำเร็จ" : "รอดำเนินการ"}
               />
-              <InfoRow label="เหตุผลยกเลิก" value={order.cancellationReason} />
-              <InfoRow label="ยกเลิกโดย" value={order.canceledBy} />
+              <RefundFact
+                label="ยอดคืนเงิน"
+                value={`฿${fmtMoney(order.refundedAmount ?? 0, currency)}`}
+                emphasized
+              />
+              <RefundFact label="รายละเอียด" value={order.cancellationReason} />
+              <RefundFact label="ดำเนินการโดย" value={refundActorLabel(order.canceledBy)} />
             </div>
 
-            {manualRefundCompleted ? (
-              <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800 dark:border-green-900 dark:bg-green-950/40 dark:text-green-300">
-                <CheckCircle2 className="size-4" />
-                ยืนยันการคืนเงินแบบ Manual เรียบร้อยแล้ว
-              </div>
-            ) : canRefund ? (
+            {!manualRefundCompleted && canRefund ? (
               <div className="flex justify-end">
                 <Button onClick={() => setRefundDialogOpen(true)}>
                   <Banknote />

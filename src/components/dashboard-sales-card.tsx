@@ -77,11 +77,11 @@ export function DashboardSalesCard({
   }
 
   return (
-    <Card className="border-emerald-300/80 bg-emerald-50/30 dark:border-emerald-800/70 dark:bg-emerald-950/10">
+    <Card className="h-full min-h-44 border-t-2 border-t-emerald-500 bg-emerald-50/40 shadow-none dark:border-t-emerald-500 dark:bg-emerald-950/10">
       <CardHeader className="gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 space-y-1.5">
-            <CardTitle className="flex items-center gap-2 leading-none">
+            <CardTitle className="flex items-center gap-2 font-semibold leading-none">
               <span className="grid size-8 place-items-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
                 <CircleDollarSign className="size-4" />
               </span>
@@ -110,7 +110,7 @@ export function DashboardSalesCard({
                     onClick={() => selectPeriod(option.value)}
                     disabled={isLoading}
                     className={cn(
-                      "h-9 rounded-md px-3 text-sm font-semibold text-muted-foreground transition-colors",
+                      "h-11 rounded-md px-3 text-sm font-semibold text-muted-foreground transition-colors duration-200",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       "disabled:opacity-80",
                       active &&
@@ -128,7 +128,7 @@ export function DashboardSalesCard({
       </CardHeader>
       <CardContent aria-busy={isLoading}>
         <div className={cn("transition-opacity", isLoading && "opacity-60")}>
-          <p className="text-3xl font-black leading-none tracking-tight text-emerald-700 dark:text-emerald-300">
+          <p className="text-3xl font-bold leading-none text-emerald-700 dark:text-emerald-300">
             {formatMoney(data.sales.total)}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
@@ -136,7 +136,7 @@ export function DashboardSalesCard({
             {formatMoney(data.sales.averagePerOrder)}
           </p>
         </div>
-        <p className="mt-1 text-[11px] text-muted-foreground">
+        <p className="mt-1 text-xs text-muted-foreground">
           {isLoading ? "กำลังอัปเดตช่วงวันที่..." : periodRange}
         </p>
         {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
@@ -176,7 +176,7 @@ function SalesMiniMetric({
 }) {
   return (
     <div className="min-w-0 border-l pl-3 first:border-l-0 first:pl-0">
-      <p className="truncate text-[11px] font-medium text-muted-foreground">
+      <p className="truncate text-xs font-medium text-muted-foreground">
         {label}
       </p>
       <p

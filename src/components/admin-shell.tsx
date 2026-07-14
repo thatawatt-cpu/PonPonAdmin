@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import {
   ChevronUp,
-  ExternalLink,
   LayoutDashboard,
   LogOut,
   Megaphone,
@@ -42,7 +41,6 @@ import {
   SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
-  SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -230,23 +228,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </SidebarGroupContent>
             </SidebarGroup>
 
-            <SidebarSeparator />
-
-            <SidebarGroup>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      render={<a href="http://localhost:3100" target="_blank" rel="noreferrer" />}
-                      tooltip="เปิดหน้าร้าน"
-                    >
-                      <ExternalLink strokeWidth={1.5} />
-                      <span>เปิดหน้าร้าน</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
           </SidebarContent>
 
           <SidebarFooter>

@@ -24,6 +24,7 @@ const CANCEL_REASONS = [
 type OrderCancelDialogProps = {
   open: boolean;
   orderNumber?: string;
+  customerName?: string;
   submitting: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (reason: string) => Promise<void>;
@@ -42,6 +43,7 @@ function buildReason(reason: string, detail: string) {
 export function OrderCancelDialog({
   open,
   orderNumber,
+  customerName,
   submitting,
   onOpenChange,
   onConfirm,
@@ -79,11 +81,20 @@ export function OrderCancelDialog({
             <AlertTriangle className="size-7 stroke-[2.4]" />
           </div>
           <DialogTitle className="text-xl font-black leading-none">
-            ยืนยันยกเลิกและขอคืนเงิน?
+            ยืนยันการยกเลิกออเดอร์
           </DialogTitle>
-          <DialogDescription className="mt-2 max-w-sm text-center text-sm leading-6">
-            ออเดอร์ {orderNumber ? <span className="font-semibold text-foreground">{orderNumber}</span> : null} จะถูกยกเลิก
-            และส่งคำขอคืนเงินให้ร้านตรวจสอบ
+          <DialogDescription className="mt-2 max-w-sm space-y-1 text-center text-sm leading-6">
+            <span className="block">คุณกำลังยกเลิกออเดอร์</span>
+            {orderNumber ? (
+              <span className="block font-semibold text-foreground">{orderNumber}</span>
+            ) : null}
+            {customerName ? (
+              <span className="block">ลูกค้า {customerName}</span>
+            ) : null}
+            <span className="block pt-2">
+              การดำเนินการนี้อาจมีผลต่อสต็อก การชำระเงิน และการจัดส่ง
+              และจะส่งคำขอคืนเงินให้ร้านตรวจสอบ
+            </span>
           </DialogDescription>
         </DialogHeader>
 
@@ -135,14 +146,14 @@ export function OrderCancelDialog({
               disabled={submitting}
               onClick={() => handleOpenChange(false)}
             >
-              ไม่ยกเลิก
+              กลับ
             </Button>
             <Button
               type="submit"
               className="h-12 rounded-full bg-[#f00012] font-bold text-white hover:bg-[#d90010] dark:bg-[#ff3b49] dark:hover:bg-[#ff5260]"
               disabled={submitting}
             >
-              {submitting ? "กำลังยกเลิก..." : "ยกเลิกและขอคืนเงิน"}
+              {submitting ? "กำลังยกเลิก..." : "ยืนยันยกเลิก"}
             </Button>
           </div>
         </form>

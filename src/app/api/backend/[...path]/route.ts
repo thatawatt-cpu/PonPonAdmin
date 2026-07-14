@@ -110,7 +110,7 @@ async function proxy(request: NextRequest, context: Context) {
 
   const responseBody = [204, 205, 304].includes(apiResponse.status)
     ? null
-    : apiResponse.body.toString("utf8");
+    : Uint8Array.from(apiResponse.body).buffer;
   const response = new NextResponse(responseBody, {
     headers: responseHeaders(apiResponse.headers),
     status: apiResponse.status,

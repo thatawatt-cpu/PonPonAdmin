@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { LoginForm } from "@/components/login-form";
 
 export const metadata: Metadata = {
-  title: "เข้าสู่ระบบ | PonPon Admin",
-  description: "เข้าสู่ระบบเพื่อจัดการร้าน PonPon",
+  title: "ผู้ดูแลระบบ | PonPon Admin",
+  description: "เข้าสู่ระบบหรือตั้งค่าผู้ดูแลคนแรกสำหรับร้าน PonPon",
 };
 
 const activity = [
@@ -72,19 +72,6 @@ export default function LoginPage() {
             </div>
 
             <div className="rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  ยินดีต้อนรับ
-                </p>
-                <h2 className="mt-3 text-2xl font-black tracking-tight">
-                  เข้าสู่ระบบ
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  ใช้อีเมลผู้ดูแลร้านเพื่อเข้าไปจัดการออเดอร์ สินค้า
-                  และโปรโมชันของ PonPon
-                </p>
-              </div>
-
               <LoginForm />
             </div>
 

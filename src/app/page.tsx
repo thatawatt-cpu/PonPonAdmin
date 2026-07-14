@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import type { ComponentType, ReactNode } from "react";
 import {
   AlertCircle,
+  ArrowRight,
   Banknote,
   CheckCircle2,
-  ExternalLink,
+  Clock3,
   Package,
   PackageCheck,
   PackageOpen,
@@ -22,6 +23,7 @@ import {
   CardAction,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -71,6 +73,7 @@ export default async function DashboardPage({
   }
 
   const attentionProducts = dashboard.inventory.attentionProducts;
+  const dashboardUpdatedAt = formatDate(new Date().toISOString());
   const attentionIssueCounts = countAttentionIssues(attentionProducts);
   const attentionLowStockCount =
     dashboard.inventory.lowStock > 0
@@ -87,6 +90,7 @@ export default async function DashboardPage({
     {
       action: "ไปจัดการออเดอร์",
       count: dashboard.orders.awaitingPacking,
+      description: "ออเดอร์ที่พร้อมเข้าสู่ขั้นตอนแพ็กสินค้า",
       href: "/orders",
       icon: PackageCheck,
       label: "รอแพ็กสินค้า",
@@ -95,6 +99,7 @@ export default async function DashboardPage({
     {
       action: "ไปตรวจสอบคำขอ",
       count: dashboard.orders.returnRequests,
+      description: "คำขอคืนสินค้าที่รอการตรวจสอบ",
       href: "/orders?returnRequestStatus=Pending",
       icon: RotateCcw,
       label: "คำขอคืนสินค้า",
@@ -103,6 +108,7 @@ export default async function DashboardPage({
     {
       action: "ไปยืนยันการคืนเงิน",
       count: dashboard.orders.refundRequests,
+      description: "คำขอคืนเงินที่รอการยืนยัน",
       href: "/orders?refundRequestStatus=Pending",
       icon: Banknote,
       label: "คำขอคืนเงิน",
@@ -111,6 +117,7 @@ export default async function DashboardPage({
     {
       action: "ไปหน้าสินค้า",
       count: attentionVariantCount,
+      description: "Variant ที่สต็อกต่ำ หมด หรือมีปัญหา Sync",
       href: "/products",
       icon: PackageOpen,
       label: "Variant ที่ต้องดูแล",
@@ -119,6 +126,7 @@ export default async function DashboardPage({
     {
       action: "เปิด Integration",
       count: dashboard.zortSync.failed,
+      description: "รายการ Sync ที่ต้องตรวจสอบและแก้ไข",
       href: "/integrations/zort",
       icon: AlertCircle,
       label: "ZORT Sync พบปัญหา",
@@ -141,7 +149,8 @@ export default async function DashboardPage({
       icon: ShoppingCart,
       detail: `${dashboard.orders.pending} รอดำเนินการ · ${dashboard.orders.awaitingPacking} รอแพ็ก · ${dashboard.orders.returnRequests} คืนสินค้า · ${dashboard.orders.refundRequests} คืนเงิน`,
       label: "ออเดอร์รอดำเนินการ",
-      tone: "amber" as const,
+      href: "/orders",
+      tone: actionableOrderCount > 0 ? ("amber" as const) : ("sky" as const),
       value: `${actionableOrderCount}`,
     },
     {
@@ -151,36 +160,33 @@ export default async function DashboardPage({
         attentionOutOfStockCount,
       ),
       label: "Variant ที่ต้องดูแล",
-      tone: "orange" as const,
+      href: "/products",
+      tone:
+        attentionVariantCount > 0 ? ("orange" as const) : ("emerald" as const),
       value: `${attentionVariantCount}`,
     },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.15em] text-muted-foreground">
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase text-muted-foreground">
             ภาพรวม
           </p>
-          <h1 className="mt-1.5 text-3xl font-black tracking-tight sm:text-4xl">
+          <h1 className="mt-1 text-[28px] font-bold leading-tight">
             ภาพรวมร้าน PonPon
           </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
             ยอดขาย ออเดอร์ งานที่ต้องทำ สต็อก การชำระเงิน และสถานะ Sync ในหน้าเดียว
           </p>
+          <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Clock3 className="size-3.5" />
+            อัปเดตล่าสุด {dashboardUpdatedAt}
+          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <a
-            href="http://localhost:3100"
-            target="_blank"
-            rel="noreferrer"
-            className={buttonVariants({ variant: "outline" })}
-          >
-            <ExternalLink />
-            เปิดหน้าร้าน
-          </a>
-          <Link href="/orders" className={buttonVariants()}>
+        <div className="grid w-full grid-cols-1 gap-2 sm:w-auto">
+          <Link href="/orders" className={buttonVariants({ size: "lg" })}>
             <ShoppingCart />
             จัดการออเดอร์
           </Link>
@@ -195,64 +201,35 @@ export default async function DashboardPage({
         </Alert>
       ) : null}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <section className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <DashboardSalesCard key={dashboard.period} dashboard={dashboard} />
         {stats.map((stat) => (
-          <Card
-            key={stat.label}
-            className={cn(
-              "overflow-hidden",
-              summaryToneClasses(stat.tone, Number(stat.value) > 0).card,
-            )}
-          >
-            <CardContent className="flex items-start gap-4 p-5">
-              <span
-                className={cn(
-                  "grid size-11 shrink-0 place-items-center rounded-xl",
-                  summaryToneClasses(stat.tone, Number(stat.value) > 0).icon,
-                )}
-              >
-                <stat.icon className="size-5" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-muted-foreground">
-                  {stat.label}
-                </p>
-                <p
-                  className={cn(
-                    "mt-1 text-3xl font-black leading-none tracking-tight",
-                    summaryToneClasses(stat.tone, Number(stat.value) > 0).value,
-                  )}
-                >
-                  {stat.value}
-                </p>
-                <p className="mt-2 text-xs text-muted-foreground">{stat.detail}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <SummaryCard key={stat.label} {...stat} />
         ))}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
-        <div className="space-y-6">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,2.2fr)_minmax(320px,1fr)]">
+        <div className="space-y-5">
           <Card
             className={cn(
-              totalUrgentTaskCount > 0 &&
-                "border-amber-300/80 bg-amber-50/30 shadow-sm dark:border-amber-700/70 dark:bg-amber-950/10",
+              "shadow-none",
+              totalUrgentTaskCount > 0
+                ? "bg-amber-50/50 ring-amber-200 dark:bg-amber-950/10 dark:ring-amber-900/70"
+                : "bg-emerald-50/40 ring-emerald-200 dark:bg-emerald-950/10 dark:ring-emerald-900/70",
             )}
           >
             <CardHeader>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <CardTitle>งานที่ต้องทำวันนี้</CardTitle>
+                  <CardTitle className="text-lg font-bold">งานที่ต้องทำวันนี้</CardTitle>
                   <CardDescription>
                     {totalUrgentTaskCount > 0
-                      ? "เข้าหน้านี้แล้วเริ่มจากรายการที่มีตัวเลขก่อน"
+                      ? "เข้ามาดำเนินการรายการที่มีตัวเลขก่อน"
                       : "ตอนนี้ยังไม่มีงานที่ต้องรีบจัดการ"}
                   </CardDescription>
                 </div>
                 {totalUrgentTaskCount > 0 ? (
-                  <Badge className="h-8 rounded-full bg-amber-500 px-3 text-sm text-white hover:bg-amber-500 dark:bg-amber-600">
+                  <Badge className="h-8 rounded-lg bg-amber-600 px-3 text-sm text-white hover:bg-amber-600 dark:bg-amber-600">
                     ต้องทำ {totalUrgentTaskCount.toLocaleString("th-TH")} งาน
                   </Badge>
                 ) : null}
@@ -267,7 +244,9 @@ export default async function DashboardPage({
                 </div>
               ) : (
                 <EmptyState
-                  icon={<CheckCircle2 className="size-8" />}
+                  icon={
+                    <CheckCircle2 className="size-8 text-emerald-600 dark:text-emerald-400" />
+                  }
                   title="ไม่มีงานเร่งด่วน"
                   description="ออเดอร์ คำขอคืนสินค้า การคืนเงิน สต็อก และการซิงก์อยู่ในสถานะปกติ"
                 />
@@ -275,34 +254,45 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-none">
             <CardHeader>
-              <CardTitle>ออเดอร์ล่าสุด</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-lg font-bold">
+                <span className="grid size-8 place-items-center rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300">
+                  <ShoppingCart className="size-4" />
+                </span>
+                ออเดอร์ล่าสุด
+              </CardTitle>
               <CardAction>
-                <Link href="/orders" className="text-xs text-muted-foreground transition-colors hover:text-foreground">
-                  ดูทั้งหมด
+                <Link href="/orders" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  ดูทั้งหมด <ArrowRight className="size-4" />
                 </Link>
               </CardAction>
             </CardHeader>
             <CardContent>
-              <div className="rounded-lg border">
-                <Table className="min-w-[640px]">
-                  <TableHeader className="bg-muted">
+              <div className="overflow-hidden rounded-lg bg-background ring-1 ring-border">
+                <Table className="min-w-[820px]">
+                  <TableHeader className="bg-muted/70">
                     <TableRow>
                       <TableHead className="px-4">ออเดอร์</TableHead>
                       <TableHead>ลูกค้า</TableHead>
                       <TableHead>การชำระเงิน</TableHead>
-                      <TableHead>ยอดรวม</TableHead>
+                      <TableHead className="text-right">ยอดรวม</TableHead>
                       <TableHead>สถานะ</TableHead>
+                      <TableHead className="px-4 text-right">ดำเนินการ</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {dashboard.orders.latest.length ? (
                       dashboard.orders.latest.map((order, index) => (
-                        <TableRow key={latestOrderKey(order, index)}>
+                        <TableRow key={latestOrderKey(order, index)} className="group">
                           <TableCell className="px-4">
-                            <p className="font-semibold">{order.number}</p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
+                            <Link
+                              href={`/orders/${order.id}`}
+                              className="font-semibold text-foreground underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {order.number}
+                            </Link>
+                            <p className="mt-0.5 text-sm text-muted-foreground">
                               {formatDate(order.orderDate)}
                             </p>
                           </TableCell>
@@ -315,7 +305,7 @@ export default async function DashboardPage({
                           >
                             {paymentStatusLabel(order.paymentStatus)}
                           </TableCell>
-                          <TableCell className="font-semibold">
+                          <TableCell className="text-right font-semibold tabular-nums">
                             {formatMoney(order.amount)}
                           </TableCell>
                           <TableCell>
@@ -326,12 +316,21 @@ export default async function DashboardPage({
                               {orderStatusLabel(order.status)}
                             </Badge>
                           </TableCell>
+                          <TableCell className="px-4 text-right">
+                            <Link
+                              href={`/orders/${order.id}`}
+                              className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-foreground transition-colors hover:text-primary focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {orderActionLabel(order)}
+                              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                            </Link>
+                          </TableCell>
                         </TableRow>
                       ))
                     ) : (
                       <TableRow>
                         <TableCell
-                          colSpan={5}
+                          colSpan={6}
                           className="px-4 py-10 text-center text-muted-foreground"
                         >
                           ยังไม่มีออเดอร์
@@ -344,12 +343,28 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-none">
             <CardHeader>
-              <CardTitle>สินค้าที่ต้องดูแล</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-lg font-bold">
+                <span
+                  className={cn(
+                    "grid size-8 place-items-center rounded-lg",
+                    attentionVariantCount > 0
+                      ? "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300"
+                      : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+                  )}
+                >
+                  {attentionVariantCount > 0 ? (
+                    <PackageOpen className="size-4" />
+                  ) : (
+                    <PackageCheck className="size-4" />
+                  )}
+                </span>
+                สินค้าที่ต้องดูแล
+              </CardTitle>
               <CardAction>
-                <Link href="/products" className="text-xs text-muted-foreground transition-colors hover:text-foreground">
-                  ไปหน้าสินค้า
+                <Link href="/products" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  ไปหน้าสินค้า <ArrowRight className="size-4" />
                 </Link>
               </CardAction>
             </CardHeader>
@@ -369,7 +384,7 @@ export default async function DashboardPage({
                   title={`มี ${attentionVariantCount.toLocaleString("th-TH")} Variant ที่ต้องดูแล`}
                   description="Dashboard ได้รับยอดรวมแล้ว แต่ยังไม่มีรายละเอียดสินค้าในรายการนี้ ให้ไปหน้าสินค้าเพื่อดู Variant ที่หมดสต็อกหรือใกล้หมด"
                   action={
-                    <Link href="/products" className={buttonVariants({ size: "sm" })}>
+                    <Link href="/products" className={buttonVariants({ size: "lg" })}>
                       ไปหน้าสินค้า
                     </Link>
                   }
@@ -380,7 +395,7 @@ export default async function DashboardPage({
                   title="ไม่มีสินค้าที่ต้องดูแล"
                   description="สินค้าทั้งหมดยังมีสต็อกเพียงพอ และไม่มีปัญหาการซิงก์"
                   action={
-                    <Link href="/products" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                    <Link href="/products" className={buttonVariants({ variant: "outline", size: "lg" })}>
                       ไปหน้าสินค้า
                     </Link>
                   }
@@ -390,13 +405,22 @@ export default async function DashboardPage({
           </Card>
         </div>
 
-        <div className="space-y-6">
-          <Card>
+        <div className="space-y-5">
+          <Card className="bg-emerald-50/35 shadow-none ring-emerald-200 dark:bg-emerald-950/10 dark:ring-emerald-900/70">
             <CardHeader>
-              <CardTitle>สถานะการชำระเงินวันนี้</CardTitle>
-              <CardDescription>
-                Payment Gateway ทั้งหมด {dashboard.payments.total} รายการ
-              </CardDescription>
+              <CardTitle className="flex items-center gap-2 text-lg font-bold">
+                <span className="grid size-8 place-items-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                  <Banknote className="size-4" />
+                </span>
+                สถานะการชำระเงินวันนี้
+              </CardTitle>
+              <CardDescription>สรุปผลรายการจาก Payment Gateway วันนี้</CardDescription>
+              <CardAction className="text-right">
+                <p className="text-2xl font-bold leading-none text-emerald-700 dark:text-emerald-300">
+                  {dashboard.payments.total.toLocaleString("th-TH")}
+                </p>
+                <p className="mt-1 text-xs font-medium text-muted-foreground">รายการทั้งหมด</p>
+              </CardAction>
             </CardHeader>
             <CardContent className="space-y-3">
               <PaymentSummary
@@ -438,59 +462,102 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            className={cn(
+              "shadow-none",
+              dashboard.zortSync.failed
+                ? "bg-red-50/35 ring-red-200 dark:bg-red-950/10 dark:ring-red-900/70"
+                : dashboard.zortSync.pending
+                  ? "bg-amber-50/35 ring-amber-200 dark:bg-amber-950/10 dark:ring-amber-900/70"
+                  : "bg-emerald-50/35 ring-emerald-200 dark:bg-emerald-950/10 dark:ring-emerald-900/70",
+            )}
+          >
             <CardHeader>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <CardTitle>สถานะ ZORT Sync</CardTitle>
-                  <CardDescription>ภาพรวมสุขภาพการซิงก์สินค้า</CardDescription>
-                </div>
-                <Badge
-                  variant={
-                    dashboard.zortSync.failed
-                      ? "destructive"
-                      : dashboard.zortSync.pending
-                        ? "outline"
-                        : "secondary"
-                  }
+              <CardTitle className="flex items-center gap-2 text-lg font-bold">
+                <span
                   className={cn(
-                    !dashboard.zortSync.failed &&
-                      !dashboard.zortSync.pending &&
-                      "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
+                    "grid size-8 place-items-center rounded-lg",
+                    dashboard.zortSync.failed
+                      ? "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300"
+                      : dashboard.zortSync.pending
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                        : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
                   )}
                 >
-                  {dashboard.zortSync.failed
-                    ? "พบปัญหา"
-                    : dashboard.zortSync.pending
-                      ? "รอซิงก์"
-                      : "ปกติ"}
-                </Badge>
-              </div>
-              <CardAction>
-                <Link href="/integrations/zort" className="text-xs text-muted-foreground transition-colors hover:text-foreground">
-                  เปิด Integration
-                </Link>
-              </CardAction>
+                  {dashboard.zortSync.failed ? (
+                    <AlertCircle className="size-4" />
+                  ) : (
+                    <CheckCircle2 className="size-4" />
+                  )}
+                </span>
+                สถานะ ZORT Sync
+              </CardTitle>
+              <CardDescription>การเชื่อมต่อ สุขภาพระบบ และผลการ Sync ล่าสุด</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <SyncRow label="สำเร็จ" tone="emerald" value={dashboard.zortSync.succeeded} />
-              <SyncRow label="กำลังดำเนินการ" tone="amber" value={dashboard.zortSync.pending} />
-              <SyncRow label="พบปัญหา" tone="red" value={dashboard.zortSync.failed} />
-              <p className="pt-1 text-xs text-muted-foreground">
-                สำเร็จล่าสุด {formatDate(dashboard.zortSync.lastSuccessfulAt)}
-              </p>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-background/80 px-4 py-3 ring-1 ring-border/70">
+                <div>
+                  <p className="text-sm font-semibold">การเชื่อมต่อ</p>
+                  <p className="text-xs text-muted-foreground">ตั้งค่าและจัดการ ZORT Integration</p>
+                </div>
+                <Link
+                  href="/integrations/zort"
+                  className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-foreground hover:text-primary focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  เปิด Integration <ArrowRight className="size-4" />
+                </Link>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                <div className="rounded-lg bg-background/70 px-4 py-3">
+                  <p className="text-xs font-medium text-muted-foreground">สถานะล่าสุด</p>
+                  <Badge
+                    variant={dashboard.zortSync.failed ? "destructive" : "secondary"}
+                    className={cn(
+                      "mt-2",
+                      dashboard.zortSync.pending &&
+                        "bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300",
+                      !dashboard.zortSync.failed &&
+                        !dashboard.zortSync.pending &&
+                        "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300",
+                    )}
+                  >
+                    {dashboard.zortSync.failed
+                      ? "พบปัญหา"
+                      : dashboard.zortSync.pending
+                        ? "กำลังดำเนินการ"
+                        : "ปกติ"}
+                  </Badge>
+                </div>
+                <div className="rounded-lg bg-background/70 px-4 py-3">
+                  <p className="text-xs font-medium text-muted-foreground">ซิงก์สำเร็จล่าสุด</p>
+                  <p className="mt-2 text-sm font-semibold leading-6">
+                    {formatDate(dashboard.zortSync.lastSuccessfulAt)}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2 border-t pt-4">
+                <p className="text-sm font-semibold">ผลการ Sync</p>
+                <SyncRow label="สำเร็จ" tone="emerald" value={dashboard.zortSync.succeeded} />
+                <SyncRow label="กำลังดำเนินการ" tone="amber" value={dashboard.zortSync.pending} />
+                <SyncRow label="พบปัญหา" tone="red" value={dashboard.zortSync.failed} />
+              </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-none">
             <CardHeader>
-              <CardTitle>ประวัติ Sync</CardTitle>
-              <CardDescription>การซิงก์สินค้าและออเดอร์ 20 รายการล่าสุด</CardDescription>
+              <CardTitle className="flex items-center gap-2 text-lg font-bold">
+                <span className="grid size-8 place-items-center rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+                  <RotateCcw className="size-4" />
+                </span>
+                ประวัติ Sync
+              </CardTitle>
+              <CardDescription>การซิงก์สินค้าและออเดอร์ 5 รายการล่าสุด</CardDescription>
             </CardHeader>
             <CardContent>
               {syncRuns.length ? (
-                <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
-                  {syncRuns.map((run) => (
+                <div className="space-y-2">
+                  {syncRuns.slice(0, 5).map((run) => (
                     <SyncRunRow key={`${run.type}-${run.id}`} run={run} />
                   ))}
                 </div>
@@ -500,10 +567,79 @@ export default async function DashboardPage({
                 </p>
               )}
             </CardContent>
+            <CardFooter className="justify-between bg-muted/30 py-3">
+              <span className="text-xs text-muted-foreground">
+                แสดง {Math.min(syncRuns.length, 5)} จาก {syncRuns.length} รายการ
+              </span>
+              <Link
+                href="/integrations/zort"
+                className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-foreground hover:text-primary focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                เปิดหน้า ZORT Sync <ArrowRight className="size-4" />
+              </Link>
+            </CardFooter>
           </Card>
         </div>
       </section>
     </div>
+  );
+}
+
+function SummaryCard({
+  detail,
+  href,
+  icon: Icon,
+  label,
+  tone,
+  value,
+}: {
+  detail: string;
+  href: string;
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  tone: "amber" | "emerald" | "orange" | "sky";
+  value: string;
+}) {
+  const colors = summaryToneClasses(tone);
+
+  return (
+    <Link
+      href={href}
+      aria-label={`ดูรายละเอียด ${label}`}
+      className="group block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      <Card
+        className={cn(
+          "h-full min-h-44 border-t-2 shadow-none transition-colors duration-200 group-hover:ring-foreground/20",
+          colors.card,
+          colors.hover,
+        )}
+      >
+        <CardContent className="flex h-full flex-col justify-between gap-5 p-5">
+          <div className="flex items-start gap-4">
+            <span
+              className={cn(
+                "grid size-11 shrink-0 place-items-center rounded-lg",
+                colors.icon,
+              )}
+            >
+              <Icon className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-muted-foreground">{label}</p>
+              <p className={cn("mt-1 text-3xl font-bold leading-none", colors.value)}>
+                {value}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{detail}</p>
+            </div>
+          </div>
+          <span className="inline-flex items-center justify-end gap-1 text-xs font-semibold text-foreground">
+            ดูรายละเอียด
+            <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+          </span>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
@@ -513,6 +649,7 @@ function TaskRow({
   task: {
     action: string;
     count: number;
+    description: string;
     href?: string;
     icon: ComponentType<{ className?: string }>;
     label: string;
@@ -521,57 +658,69 @@ function TaskRow({
 }) {
   const needsAction = task.count > 0;
   const tone = taskToneClasses(task.tone);
-
-  return (
-    <div
-      className={cn(
-        "flex items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors",
-        needsAction
-          ? tone.row
-          : "bg-background opacity-70",
-      )}
-    >
+  const content = (
+    <>
       <div className="flex min-w-0 items-center gap-3">
         <span
           className={cn(
-            "grid size-10 shrink-0 place-items-center rounded-full",
-            needsAction
-              ? tone.icon
-              : "bg-muted text-muted-foreground",
+            "grid size-11 shrink-0 place-items-center rounded-lg",
+            needsAction ? tone.icon : "bg-muted text-muted-foreground",
           )}
         >
           <task.icon className="size-5" />
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{task.label}</p>
-          <p className="text-xs text-muted-foreground">{task.action}</p>
+          <p className="text-sm font-semibold leading-5">{task.label}</p>
+          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+            {task.description}
+          </p>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 flex-col items-end gap-1.5">
         <Badge
           variant={needsAction ? "default" : "secondary"}
           className={cn(
-            needsAction &&
-              "h-8 min-w-8 rounded-full border-0 px-3 text-sm text-white",
+            "h-7 rounded-lg px-2.5 text-xs",
+            needsAction && "border-0 text-white",
             needsAction && tone.badge,
           )}
         >
-          {task.count}
+          {task.count.toLocaleString("th-TH")} รายการ
         </Badge>
-        {task.href ? (
-          <Link
-            href={task.href}
-            className={cn(
-              "text-xs font-semibold transition-colors",
-              needsAction
-                ? tone.link
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            ไป
-          </Link>
-        ) : null}
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 text-xs font-semibold",
+            needsAction ? tone.link : "text-muted-foreground",
+          )}
+        >
+          {needsAction ? "ดูรายการ" : "ไม่มีรายการ"}
+          {needsAction ? <ArrowRight className="size-3.5" /> : null}
+        </span>
       </div>
+    </>
+  );
+
+  if (needsAction && task.href) {
+    return (
+      <Link
+        href={task.href}
+        aria-label={`${task.action}: ${task.count} รายการ`}
+        className={cn(
+          "flex min-h-20 items-center justify-between gap-3 rounded-lg px-4 py-3 transition-colors duration-200",
+          "hover:brightness-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          tone.row,
+        )}
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div
+      className="flex min-h-20 items-center justify-between gap-3 rounded-lg bg-muted/60 px-4 py-3"
+    >
+      {content}
     </div>
   );
 }
@@ -588,10 +737,10 @@ function EmptyState({
   title: string;
 }) {
   return (
-    <div className="flex flex-col items-center rounded-xl border border-dashed bg-muted/20 px-5 py-8 text-center">
+    <div className="flex flex-col items-center rounded-lg bg-muted/30 px-5 py-6 text-center">
       <span className="text-muted-foreground">{icon}</span>
-      <p className="mt-3 text-sm font-semibold">{title}</p>
-      <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
+      <p className="mt-3 text-base font-semibold">{title}</p>
+      <p className="mt-1 max-w-md text-sm leading-6 text-muted-foreground">
         {description}
       </p>
       {action ? <div className="mt-4">{action}</div> : null}
@@ -601,6 +750,18 @@ function EmptyState({
 
 function latestOrderKey(order: DashboardOrder, index: number) {
   return [order.id, order.number, order.orderDate ?? "no-date", index].join("-");
+}
+
+function orderActionLabel(order: DashboardOrder) {
+  if (order.paymentStatus.trim().toLowerCase() === "pending") {
+    return "ตรวจสอบการชำระเงิน";
+  }
+
+  if (order.status.trim().toLowerCase() === "waiting") {
+    return "แพ็กสินค้า";
+  }
+
+  return "ดูรายละเอียด";
 }
 
 function attentionProductKey(item: DashboardAttentionProduct, index: number) {
@@ -641,7 +802,7 @@ function ProductAttentionRow({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-3 rounded-xl border px-3 py-3 sm:px-4",
+        "flex items-center justify-between gap-3 rounded-lg px-3 py-3 sm:px-4",
         issue.row,
       )}
     >
@@ -708,19 +869,19 @@ function attentionProductIssue(issue: DashboardAttentionProduct["issue"]) {
     LowStock: {
       badge: "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
       label: "ใกล้หมด",
-      row: "border-amber-200 bg-amber-50/40 dark:border-amber-900/70 dark:bg-amber-950/10",
+      row: "bg-amber-50/70 dark:bg-amber-950/15",
       variant: "outline",
     },
     OutOfStock: {
       badge: "bg-red-600 text-white hover:bg-red-600",
       label: "หมด",
-      row: "border-red-200 bg-red-50/40 dark:border-red-900/70 dark:bg-red-950/10",
+      row: "bg-red-50/70 dark:bg-red-950/15",
       variant: "destructive",
     },
     SyncIssue: {
       badge: "bg-rose-600 text-white hover:bg-rose-600",
       label: "Sync ผิดพลาด / หายจากต้นทาง",
-      row: "border-rose-200 bg-rose-50/40 dark:border-rose-900/70 dark:bg-rose-950/10",
+      row: "bg-rose-50/70 dark:bg-rose-950/15",
       variant: "destructive",
     },
   };
@@ -745,9 +906,9 @@ function SyncRunRow({ run }: { run: DashboardSyncRun }) {
   return (
     <div
       className={cn(
-        "rounded-xl border px-4 py-3",
-        failed && "border-red-200 bg-red-50/40 dark:border-red-900/70 dark:bg-red-950/10",
-        running && "border-amber-200 bg-amber-50/40 dark:border-amber-900/70 dark:bg-amber-950/10",
+        "rounded-lg bg-muted/40 px-4 py-3",
+        failed && "bg-red-50/70 dark:bg-red-950/15",
+        running && "bg-amber-50/70 dark:bg-amber-950/15",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -789,7 +950,7 @@ function PaymentSummary({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-4 rounded-xl border px-4 py-3",
+        "flex items-center justify-between gap-4 rounded-lg px-4 py-3",
         colors.row,
       )}
     >
@@ -816,7 +977,7 @@ function SyncRow({
   return (
     <div
       className={cn(
-        "flex items-center justify-between rounded-xl border px-4 py-3",
+        "flex items-center justify-between rounded-lg px-4 py-3",
         colors.row,
       )}
     >
@@ -829,30 +990,36 @@ function SyncRow({
 }
 
 function summaryToneClasses(
-  tone: "amber" | "orange",
-  active: boolean,
+  tone: "amber" | "emerald" | "orange" | "sky",
 ) {
-  if (!active) {
-    return {
-      card: "border-border",
-      icon: "bg-muted text-muted-foreground",
-      value: "text-foreground",
-    };
-  }
-
-  if (tone === "amber") {
-    return {
-      card: "border-amber-300/80 bg-amber-50/30 dark:border-amber-800/70 dark:bg-amber-950/10",
+  const colors = {
+    amber: {
+      card: "border-t-amber-500 bg-amber-50/45 dark:border-t-amber-500 dark:bg-amber-950/10",
+      hover: "group-hover:bg-amber-50/80 dark:group-hover:bg-amber-950/20",
       icon: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
       value: "text-amber-700 dark:text-amber-300",
-    };
-  }
-
-  return {
-    card: "border-orange-300/80 bg-orange-50/30 dark:border-orange-800/70 dark:bg-orange-950/10",
-    icon: "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300",
-    value: "text-orange-700 dark:text-orange-300",
+    },
+    emerald: {
+      card: "border-t-emerald-500 bg-emerald-50/40 dark:border-t-emerald-500 dark:bg-emerald-950/10",
+      hover: "group-hover:bg-emerald-50/75 dark:group-hover:bg-emerald-950/20",
+      icon: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+      value: "text-emerald-700 dark:text-emerald-300",
+    },
+    orange: {
+      card: "border-t-orange-500 bg-orange-50/45 dark:border-t-orange-500 dark:bg-orange-950/10",
+      hover: "group-hover:bg-orange-50/80 dark:group-hover:bg-orange-950/20",
+      icon: "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300",
+      value: "text-orange-700 dark:text-orange-300",
+    },
+    sky: {
+      card: "border-t-sky-500 bg-sky-50/40 dark:border-t-sky-500 dark:bg-sky-950/10",
+      hover: "group-hover:bg-sky-50/75 dark:group-hover:bg-sky-950/20",
+      icon: "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300",
+      value: "text-sky-700 dark:text-sky-300",
+    },
   };
+
+  return colors[tone];
 }
 
 function taskToneClasses(
@@ -863,31 +1030,31 @@ function taskToneClasses(
       badge: "bg-amber-500 hover:bg-amber-500 dark:bg-amber-600",
       icon: "bg-amber-500 text-white dark:bg-amber-600",
       link: "text-amber-700 hover:text-amber-800 dark:text-amber-300",
-      row: "border-amber-300 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/15",
+      row: "bg-amber-100/70 dark:bg-amber-950/20",
     },
     orange: {
       badge: "bg-orange-500 hover:bg-orange-500 dark:bg-orange-600",
       icon: "bg-orange-500 text-white dark:bg-orange-600",
       link: "text-orange-700 hover:text-orange-800 dark:text-orange-300",
-      row: "border-orange-300 bg-orange-50/50 dark:border-orange-800 dark:bg-orange-950/15",
+      row: "bg-orange-100/70 dark:bg-orange-950/20",
     },
     red: {
       badge: "bg-red-600 hover:bg-red-600",
       icon: "bg-red-600 text-white",
       link: "text-red-700 hover:text-red-800 dark:text-red-300",
-      row: "border-red-300 bg-red-50/50 dark:border-red-800 dark:bg-red-950/15",
+      row: "bg-red-100/70 dark:bg-red-950/20",
     },
     rose: {
       badge: "bg-rose-600 hover:bg-rose-600",
       icon: "bg-rose-600 text-white",
       link: "text-rose-700 hover:text-rose-800 dark:text-rose-300",
-      row: "border-rose-300 bg-rose-50/50 dark:border-rose-800 dark:bg-rose-950/15",
+      row: "bg-rose-100/70 dark:bg-rose-950/20",
     },
     sky: {
       badge: "bg-sky-600 hover:bg-sky-600",
       icon: "bg-sky-600 text-white",
       link: "text-sky-700 hover:text-sky-800 dark:text-sky-300",
-      row: "border-sky-300 bg-sky-50/50 dark:border-sky-800 dark:bg-sky-950/15",
+      row: "bg-sky-100/70 dark:bg-sky-950/20",
     },
   };
 
@@ -899,23 +1066,23 @@ function paymentToneClasses(
 ) {
   const colors = {
     amber: {
-      row: "border-amber-200 bg-amber-50/40 dark:border-amber-900/70 dark:bg-amber-950/10",
+      row: "bg-amber-50/70 dark:bg-amber-950/15",
       value: "text-amber-700 dark:text-amber-300",
     },
     emerald: {
-      row: "border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/70 dark:bg-emerald-950/10",
+      row: "bg-emerald-50/70 dark:bg-emerald-950/15",
       value: "text-emerald-700 dark:text-emerald-300",
     },
     orange: {
-      row: "border-orange-200 bg-orange-50/40 dark:border-orange-900/70 dark:bg-orange-950/10",
+      row: "bg-orange-50/70 dark:bg-orange-950/15",
       value: "text-orange-700 dark:text-orange-300",
     },
     red: {
-      row: "border-red-200 bg-red-50/40 dark:border-red-900/70 dark:bg-red-950/10",
+      row: "bg-red-50/70 dark:bg-red-950/15",
       value: "text-red-700 dark:text-red-300",
     },
     sky: {
-      row: "border-sky-200 bg-sky-50/40 dark:border-sky-900/70 dark:bg-sky-950/10",
+      row: "bg-sky-50/70 dark:bg-sky-950/15",
       value: "text-sky-700 dark:text-sky-300",
     },
   };
@@ -927,15 +1094,15 @@ function syncToneClasses(tone: "amber" | "emerald" | "red") {
   const colors = {
     amber: {
       badge: "bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300",
-      row: "border-amber-200 bg-amber-50/40 dark:border-amber-900/70 dark:bg-amber-950/10",
+      row: "bg-amber-50/70 dark:bg-amber-950/15",
     },
     emerald: {
       badge: "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300",
-      row: "border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/70 dark:bg-emerald-950/10",
+      row: "bg-emerald-50/70 dark:bg-emerald-950/15",
     },
     red: {
       badge: "bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-950/60 dark:text-red-300",
-      row: "border-red-200 bg-red-50/40 dark:border-red-900/70 dark:bg-red-950/10",
+      row: "bg-red-50/70 dark:bg-red-950/15",
     },
   };
 

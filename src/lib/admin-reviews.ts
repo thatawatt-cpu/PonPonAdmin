@@ -1,5 +1,9 @@
 import { cookies } from "next/headers";
-import { PonPonApiError, ponponApiJson } from "@/lib/ponpon-api";
+import {
+  PONPON_API_BASE_URL,
+  PonPonApiError,
+  ponponApiJson,
+} from "@/lib/ponpon-api";
 
 export type ReviewStatus = "published" | "hidden";
 export type ReviewMediaStatus = "processing" | "ready" | "failed" | string;
@@ -206,13 +210,36 @@ function normalizeReview(review: ApiReview): AdminReview {
 }
 
 function normalizeMedia(media: ApiReviewMedia): AdminReviewMedia {
+  const url = normalizeMediaUrl(media.url ?? media.mediaUrl);
+
   return {
-    id: media.id ?? media.url ?? media.mediaUrl ?? crypto.randomUUID(),
-    url: media.url ?? media.mediaUrl ?? "",
-    thumbnailUrl: media.thumbnailUrl ?? null,
+    id: media.id ?? url ?? crypto.randomUUID(),
+    url: url ?? "",
+    thumbnailUrl: normalizeMediaUrl(media.thumbnailUrl),
     type: media.type ?? media.mediaType ?? null,
     status: media.status ?? "ready",
   };
+}
+
+function normalizeMediaUrl(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  try {
+    const mediaUrl = new URL(trimmed, PONPON_API_BASE_URL);
+    const apiUrl = new URL(PONPON_API_BASE_URL);
+
+    if (
+      mediaUrl.origin === apiUrl.origin &&
+      mediaUrl.pathname.startsWith("/api/")
+    ) {
+      return `/api/backend/${mediaUrl.pathname.slice(5)}${mediaUrl.search}`;
+    }
+
+    return mediaUrl.toString();
+  } catch {
+    return trimmed;
+  }
 }
 
 function positiveInteger(value: unknown, fallback: number) {

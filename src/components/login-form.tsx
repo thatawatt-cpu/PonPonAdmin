@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 
 type AuthMode = "login" | "setup";
 
@@ -14,19 +15,60 @@ type ApiErrorBody = {
   errorCode?: string;
   error?: string;
   message?: string;
-  paths?: string[];
   rawText?: string;
   status?: number;
 };
 
 export function LoginForm() {
   const router = useRouter();
-  const [mode, setMode] = useState<AuthMode>("login");
+  const [mode, setMode] = useState<AuthMode | null>(null);
   const [error, setError] = useState("");
+  const [statusError, setStatusError] = useState("");
+  const [statusReloadKey, setStatusReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadSetupStatus() {
+      try {
+        const response = await fetch("/api/backend/admin/auth/setup-status", {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error("Cannot load admin setup status");
+        }
+
+        const body = (await response.json()) as { hasAdmin?: unknown };
+        if (typeof body.hasAdmin !== "boolean") {
+          throw new Error("Invalid admin setup status");
+        }
+
+        if (active) {
+          setMode(body.hasAdmin ? "login" : "setup");
+          setStatusError("");
+          setError("");
+        }
+      } catch {
+        if (active) {
+          setMode(null);
+          setStatusError("ตรวจสอบสถานะผู้ดูแลระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+        }
+      }
+    }
+
+    void loadSetupStatus();
+
+    return () => {
+      active = false;
+    };
+  }, [statusReloadKey]);
 
   async function submit(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!mode) return;
+
     setError("");
     setLoading(true);
 
@@ -42,14 +84,14 @@ export function LoginForm() {
           return;
         }
 
-        const { paths, response: registerResponse } = await registerFirstAdmin({
+        const registerResponse = await registerFirstAdmin({
           displayName: displayName.trim() || "PonPon Admin",
           email: email.trim(),
           password,
         });
 
         if (!registerResponse.ok) {
-          const body = { ...(await readApiError(registerResponse)), paths };
+          const body = await readApiError(registerResponse);
 
           if (isAdminAlreadyExists(body)) {
             setMode("login");
@@ -68,8 +110,8 @@ export function LoginForm() {
         const body = await readApiError(loginResponse);
 
         if (isFirstAdminRequired(body)) {
-          setMode("setup");
-          setError("ยังไม่มีบัญชี Admin ในระบบ กรุณาสร้าง Admin คนแรกเพื่อเริ่มใช้งาน");
+          setMode(null);
+          setStatusReloadKey((current) => current + 1);
           return;
         }
 
@@ -86,112 +128,143 @@ export function LoginForm() {
     }
   }
 
-  return (
-    <form className="mt-6 space-y-4" onSubmit={submit}>
-      <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-muted/30 p-1">
-        <button
-          type="button"
-          onClick={() => {
-            setMode("login");
-            setError("");
-          }}
-          className={`rounded-md px-3 py-2 text-sm font-bold transition ${
-            mode === "login"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          เข้าสู่ระบบ
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setMode("setup");
-            setError("");
-          }}
-          className={`rounded-md px-3 py-2 text-sm font-bold transition ${
-            mode === "setup"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          ตั้งค่า Admin
-        </button>
+  if (!mode) {
+    return (
+      <div className="min-h-64">
+        <AuthHeading
+          title={statusError ? "ยังเปิดหน้าผู้ดูแลไม่ได้" : "กำลังเตรียมระบบ"}
+          description={
+            statusError
+              ? "ระบบยังตรวจสอบสถานะผู้ดูแลไม่สำเร็จ"
+              : "กำลังตรวจสอบว่าร้านมีบัญชีผู้ดูแลแล้วหรือยัง"
+          }
+        />
+        {statusError ? (
+          <div className="mt-6 space-y-4">
+            <Alert variant="destructive">
+              <AlertDescription>{statusError}</AlertDescription>
+            </Alert>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setStatusError("");
+                setStatusReloadKey((current) => current + 1);
+              }}
+            >
+              ลองใหม่
+            </Button>
+          </div>
+        ) : (
+          <div className="flex min-h-40 items-center justify-center" role="status">
+            <Spinner className="size-6 text-muted-foreground" />
+            <span className="sr-only">กำลังตรวจสอบสถานะผู้ดูแล</span>
+          </div>
+        )}
       </div>
+    );
+  }
 
-      {mode === "setup" ? (
+  return (
+    <div>
+      <AuthHeading
+        title={mode === "setup" ? "สร้างผู้ดูแลคนแรก" : "เข้าสู่ระบบ"}
+        description={
+          mode === "setup"
+            ? "ตั้งค่าบัญชี Admin เพื่อเริ่มจัดการร้าน PonPon"
+            : "ใช้อีเมลและรหัสผ่านของผู้ดูแลร้าน"
+        }
+      />
+
+      <form className="mt-6 space-y-4" onSubmit={submit}>
+        {mode === "setup" ? (
+          <div className="space-y-2">
+            <Label htmlFor="displayName">ชื่อผู้ดูแล</Label>
+            <Input
+              id="displayName"
+              type="text"
+              name="displayName"
+              autoComplete="name"
+              defaultValue="PonPon Admin"
+              required
+            />
+          </div>
+        ) : null}
+
         <div className="space-y-2">
-          <Label htmlFor="displayName">ชื่อผู้ดูแล</Label>
+          <Label htmlFor="email">อีเมล</Label>
           <Input
-            id="displayName"
-            type="text"
-            name="displayName"
-            autoComplete="name"
-            defaultValue="PonPon Admin"
+            id="email"
+            type="email"
+            name="email"
+            autoComplete="email"
+            required
           />
         </div>
-      ) : null}
 
-      <div className="space-y-2">
-        <Label htmlFor="email">อีเมล</Label>
-        <Input
-          id="email"
-          type="email"
-          name="email"
-          autoComplete="email"
-          required
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="password">รหัสผ่าน</Label>
-        <Input
-          id="password"
-          type="password"
-          name="password"
-          placeholder="••••••••"
-          autoComplete={mode === "setup" ? "new-password" : "current-password"}
-          minLength={mode === "setup" ? 8 : undefined}
-          required
-        />
-        {mode === "setup" ? (
-          <p className="text-xs leading-5 text-muted-foreground">
-            ใช้ได้เฉพาะตอนที่ระบบยังไม่มี user role Admin และรหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร
-          </p>
-        ) : null}
-      </div>
-
-      {mode === "login" ? (
-        <div className="flex items-center justify-between gap-3">
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-border"
-            />
-            จดจำฉัน
-          </label>
-          <a href="mailto:support@ponpon.co" className="text-sm font-medium underline underline-offset-4 hover:text-foreground">
-            ลืมรหัสผ่าน
-          </a>
+        <div className="space-y-2">
+          <Label htmlFor="password">รหัสผ่าน</Label>
+          <Input
+            id="password"
+            type="password"
+            name="password"
+            placeholder="••••••••"
+            autoComplete={mode === "setup" ? "new-password" : "current-password"}
+            minLength={mode === "setup" ? 8 : undefined}
+            required
+          />
+          {mode === "setup" ? (
+            <p className="text-xs leading-5 text-muted-foreground">
+              รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร บัญชีนี้จะเป็นผู้ดูแลคนแรกของระบบ
+            </p>
+          ) : null}
         </div>
-      ) : null}
 
-      {error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
+        {mode === "login" ? (
+          <div className="flex items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-border"
+              />
+              จดจำฉัน
+            </label>
+            <a href="mailto:support@ponpon.co" className="text-sm font-medium underline underline-offset-4 hover:text-foreground">
+              ลืมรหัสผ่าน
+            </a>
+          </div>
+        ) : null}
 
-      <Button type="submit" disabled={loading} className="w-full">
-        {loading
-          ? mode === "setup"
-            ? "กำลังสร้าง Admin..."
-            : "กำลังเข้าสู่ระบบ..."
-          : mode === "setup"
-            ? "สร้าง Admin และเข้าสู่ระบบ"
-            : "เข้าสู่ระบบ"}
-      </Button>
-    </form>
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Button type="submit" disabled={loading} className="w-full">
+          {loading
+            ? mode === "setup"
+              ? "กำลังสร้าง Admin..."
+              : "กำลังเข้าสู่ระบบ..."
+            : mode === "setup"
+              ? "สร้าง Admin และเข้าสู่ระบบ"
+              : "เข้าสู่ระบบ"}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+function AuthHeading({ title, description }: { title: string; description: string }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        PonPon Admin
+      </p>
+      <h2 className="mt-3 text-2xl font-black tracking-tight">{title}</h2>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+    </div>
   );
 }
 
@@ -208,24 +281,11 @@ async function registerFirstAdmin(payload: {
   email: string;
   password: string;
 }) {
-  const paths = [
-    "/api/backend/admin/auth/register-first-admin",
-    "/api/backend/auth/register-first-admin",
-  ];
-
-  for (const path of paths) {
-    const response = await fetch(path, {
-      body: JSON.stringify(payload),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-
-    if (response.status !== 404 || path === paths[paths.length - 1]) {
-      return { paths: paths.slice(0, paths.indexOf(path) + 1), response };
-    }
-  }
-
-  throw new Error("register-first-admin endpoint not found");
+  return fetch("/api/backend/admin/auth/register-first-admin", {
+    body: JSON.stringify(payload),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
 }
 
 async function readApiError(response: Response): Promise<ApiErrorBody> {
@@ -309,7 +369,6 @@ function diagnosticDetails(body: ApiErrorBody, code: string, message: string) {
   return [
     `HTTP ${body.status}`,
     code && code !== message.toLowerCase() ? code : "",
-    body.status === 404 && body.paths?.length ? `tried ${body.paths.join(" -> ")}` : "",
   ].filter(Boolean);
 }
 

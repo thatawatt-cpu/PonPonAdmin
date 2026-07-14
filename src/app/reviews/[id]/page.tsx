@@ -1,9 +1,9 @@
 import Link from "next/link";
-import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Star } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { ReviewActions } from "@/components/review-actions";
+import { ReviewMediaImage } from "@/components/review-media-image";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,13 +67,11 @@ export default async function ReviewDetailPage({
                     className="overflow-hidden rounded-lg border border-border bg-muted"
                   >
                     {media.url ? (
-                      <Image
-                        alt=""
+                      <ReviewMediaImage
+                        alt={`รูปประกอบรีวิว ${review.productName}`}
                         className="aspect-square w-full object-cover"
-                        height={640}
                         src={media.thumbnailUrl ?? media.url}
-                        unoptimized
-                        width={640}
+                        fallbackSrc={media.url}
                       />
                     ) : (
                       <div className="aspect-square" />

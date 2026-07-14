@@ -47,7 +47,7 @@ export function ProductGroupCard({ group }: { group: ProductGroup }) {
   const displayImage = (isVariantGroup ? variantImages[selectedIndex] : null) ?? primary.image;
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="h-full overflow-hidden">
       <div className="relative aspect-[4/3] bg-white dark:bg-zinc-900">
         <Image
           src={displayImage}
@@ -87,7 +87,7 @@ export function ProductGroupCard({ group }: { group: ProductGroup }) {
         </div>
       )}
 
-      <CardContent className="p-3">
+      <CardContent className="flex flex-1 flex-col p-3">
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <Tag className="size-3 shrink-0" />
@@ -114,7 +114,7 @@ export function ProductGroupCard({ group }: { group: ProductGroup }) {
         <h2 className="mt-1.5 font-bold leading-snug">{getGroupName(primary.name)}</h2>
         <p className="mt-0.5 text-[11px] text-muted-foreground">SKU: {group.groupSku}</p>
 
-        <div className="mt-3 flex items-end justify-between gap-3">
+        <div className="mt-auto flex items-end justify-between gap-3 pt-4">
           <div>
             <p className="text-2xl font-black">
               {minPrice === maxPrice

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { redirect } from "next/navigation";
 import {
   ChevronLeft,
@@ -13,6 +12,7 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { ReviewActions } from "@/components/review-actions";
 import { ReviewFilterBar } from "@/components/review-filter-bar";
+import { ReviewMediaImage } from "@/components/review-media-image";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -288,13 +288,11 @@ function MediaPreview({ review }: { review: AdminReview }) {
           title={media.status}
         >
           {media.url ? (
-            <Image
-              alt=""
+            <ReviewMediaImage
+              alt={`รูปประกอบรีวิว ${review.productName}`}
               className="size-full object-cover"
-              height={64}
               src={media.thumbnailUrl ?? media.url}
-              unoptimized
-              width={64}
+              fallbackSrc={media.url}
             />
           ) : null}
           <span

@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, KeyRound, RefreshCw, Save } from "lucide-react";
+import { CheckCircle2, Eye, KeyRound, RadioTower, RefreshCw, Save } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
@@ -40,6 +47,14 @@ export function IntegrationsSettingsForm() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [saveStates, setSaveStates] = useState<Partial<Record<IntegrationGroup, SaveState>>>({});
+  const [webhookData, setWebhookData] = useState<unknown>(null);
+  const [webhookDialogOpen, setWebhookDialogOpen] = useState(false);
+  const [webhookLoading, setWebhookLoading] = useState(false);
+  const [webhookState, setWebhookState] = useState<SaveState>({
+    saving: false,
+    message: "",
+    ok: false,
+  });
 
   async function loadIntegrations() {
     setLoading(true);
@@ -119,6 +134,67 @@ export function IntegrationsSettingsForm() {
         [key]: value,
       },
     }));
+  }
+
+  async function registerZortWebhook() {
+    setWebhookState({ saving: true, message: "", ok: false });
+
+    try {
+      const response = await fetch(
+        "/api/backend/admin/settings/integrations/ZORT/register-webhook",
+        { method: "POST" },
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          await extractErrorMessage(response, "ลงทะเบียน ZORT Webhook ไม่สำเร็จ"),
+        );
+      }
+
+      setWebhookState({
+        saving: false,
+        message: "ลงทะเบียน Webhook กับ ZORT แล้ว",
+        ok: true,
+      });
+    } catch (registerError) {
+      setWebhookState({
+        saving: false,
+        message:
+          registerError instanceof Error
+            ? registerError.message
+            : "ลงทะเบียน ZORT Webhook ไม่สำเร็จ",
+        ok: false,
+      });
+    }
+  }
+
+  async function openZortWebhooks() {
+    setWebhookDialogOpen(true);
+    setWebhookLoading(true);
+    setWebhookData(null);
+
+    try {
+      const response = await fetch(
+        "/api/backend/admin/settings/integrations/ZORT/webhooks",
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          await extractErrorMessage(response, "โหลด Webhook จาก ZORT ไม่สำเร็จ"),
+        );
+      }
+
+      setWebhookData(await response.json());
+    } catch (webhookError) {
+      setWebhookData({
+        error:
+          webhookError instanceof Error
+            ? webhookError.message
+            : "โหลด Webhook จาก ZORT ไม่สำเร็จ",
+      });
+    } finally {
+      setWebhookLoading(false);
+    }
   }
 
   if (loading) {
@@ -227,7 +303,40 @@ export function IntegrationsSettingsForm() {
                   </p>
                 ) : null}
 
-                <div className="flex justify-end">
+                {group === "ZORT" && webhookState.message ? (
+                  <p
+                    className={
+                      webhookState.ok
+                        ? "text-sm font-medium text-emerald-700 dark:text-emerald-400"
+                        : "text-sm font-medium text-destructive"
+                    }
+                  >
+                    {webhookState.message}
+                  </p>
+                ) : null}
+
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  {group === "ZORT" ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void openZortWebhooks()}
+                      >
+                        <Eye />
+                        ดู Webhook ที่ ZORT
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void registerZortWebhook()}
+                        disabled={webhookState.saving || config.fields.length === 0}
+                      >
+                        {webhookState.saving ? <Spinner /> : <RadioTower />}
+                        {webhookState.saving ? "กำลังลงทะเบียน..." : "ลงทะเบียน Webhook"}
+                      </Button>
+                    </>
+                  ) : null}
                   <Button
                     type="button"
                     onClick={() => saveGroup(group)}
@@ -242,8 +351,39 @@ export function IntegrationsSettingsForm() {
           );
         })}
       </div>
+
+      <Dialog open={webhookDialogOpen} onOpenChange={setWebhookDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Webhook ที่ตั้งอยู่ใน ZORT</DialogTitle>
+            <DialogDescription>
+              ข้อมูลจริงจาก ZORT Integration ตามค่าที่บันทึกไว้ในระบบ
+            </DialogDescription>
+          </DialogHeader>
+          {webhookLoading ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+              <Spinner /> กำลังโหลด Webhook
+            </div>
+          ) : isEmptyWebhookData(webhookData) ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              ยังไม่มี Webhook ที่ ZORT ส่งกลับมา
+            </p>
+          ) : (
+            <pre className="max-h-[60vh] overflow-auto rounded-lg bg-muted p-4 text-xs leading-6">
+              {JSON.stringify(webhookData, null, 2)}
+            </pre>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function isEmptyWebhookData(value: unknown) {
+  if (value == null) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "object") return Object.keys(value).length === 0;
+  return false;
 }
 
 function initialValues(configs: IntegrationGroupConfig[]) {

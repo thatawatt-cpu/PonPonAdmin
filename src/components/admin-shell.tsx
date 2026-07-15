@@ -64,7 +64,7 @@ const navItems: Array<{
   { href: "/", label: "แดชบอร์ด", icon: LayoutDashboard, permission: "dashboard.read" },
   { href: "/orders", label: "ออเดอร์", icon: ShoppingCart, permission: "orders.read" },
   { href: "/products", label: "สินค้า", icon: Package, permission: "products.read" },
-  { href: "/reviews", label: "รีวิว", icon: MessageSquareText, permission: "reviews.manage" },
+  { href: "/reviews", label: "รีวิว", icon: MessageSquareText, permission: "reviews.read" },
   { href: "/integrations/zort", label: "ซิงก์ ZORT", icon: RefreshCw, permission: "integrations.read" },
   { href: "/home-slides", label: "สไลด์หน้าแรก", icon: SlidersHorizontal, permission: "marketing.manage" },
   { href: "/customers", label: "ลูกค้า", icon: Users, permission: "customers.read" },
@@ -125,15 +125,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const marketingActive = marketingItems.some((item) =>
     pathname.startsWith(item.href),
   );
-  const adminName = currentAdmin?.displayName?.trim() || "ผู้ดูแล";
-  const adminRole = currentAdmin?.role || "ผู้ดูแลระบบ";
+  const sessionLoading = pathname !== "/login" && profileLoading;
+  const uiAdmin = sessionLoading ? null : currentAdmin;
+  const adminName = uiAdmin?.displayName?.trim() || "กำลังโหลด";
+  const adminRole = uiAdmin?.role || "ตรวจสอบสิทธิ์";
   const adminInitials = getInitials(adminName);
 
   useEffect(() => {
-    if (pathname === "/login") return;
+    if (pathname === "/login") {
+      return;
+    }
     const controller = new AbortController();
 
     async function loadCurrentAdmin() {
+      setProfileLoading(true);
       try {
         const response = await fetch("/api/backend/admin/auth/me", {
           cache: "no-store",
@@ -171,6 +176,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   async function logout() {
     setUserMenuOpen(false);
     setUserMenuRect(null);
+    setCurrentAdmin(null);
+    setProfileLoading(true);
     setLoggingOut(true);
     try {
       await fetch("/api/backend/auth/logout", { method: "POST" });
@@ -182,7 +189,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AdminSessionProvider loading={profileLoading} user={currentAdmin}>
+    <AdminSessionProvider loading={sessionLoading} user={uiAdmin}>
     <TooltipProvider>
       <SidebarProvider>
         <Sidebar collapsible="icon">
@@ -213,7 +220,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <SidebarGroupLabel>เมนูหลัก</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {navItems.filter((item) => hasPermission(currentAdmin, item.permission)).map((item) => {
+                  {!sessionLoading ? navItems.filter((item) => hasPermission(uiAdmin, item.permission)).map((item) => {
                     const active =
                       item.href === "/"
                         ? pathname === "/"
@@ -230,9 +237,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     );
-                  })}
+                  }) : <SidebarMenuSkeleton />}
 
-                  {hasPermission(currentAdmin, "marketing.manage") ? <SidebarMenuItem>
+                  {!sessionLoading && hasPermission(uiAdmin, "marketing.manage") ? <SidebarMenuItem>
                     <SidebarMenuButton
                       type="button"
                       onClick={() => setMarketingOpen((open) => !open)}
@@ -269,7 +276,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                     ) : null}
                   </SidebarMenuItem> : null}
 
-                  {hasAnyPermission(currentAdmin, ["settings.manage", "integrations.read", "admin_users.read"]) ? <SidebarMenuItem>
+                  {!sessionLoading && hasAnyPermission(uiAdmin, ["settings.manage", "integrations.read", "admin_users.read"]) ? <SidebarMenuItem>
                     <SidebarMenuButton
                       render={<Link href="/settings" />}
                       isActive={pathname.startsWith("/settings")}
@@ -307,9 +314,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                           <div className="grid min-w-0 text-sm leading-tight">
                             <span className="truncate font-semibold">{adminName}</span>
                             <span className="truncate text-xs text-muted-foreground">
-                              {currentAdmin?.email || adminRole}
+                              {uiAdmin?.email || adminRole}
                             </span>
-                            {currentAdmin?.email ? (
+                            {uiAdmin?.email ? (
                               <span className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
                                 {adminRole}
                               </span>
@@ -378,12 +385,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <div className={fullBleed ? "border-b border-border px-4 py-3 sm:px-6" : "mb-5"}>
               <AdminBreadcrumb pathname={pathname} />
             </div>
-            {profileLoading ? (
+            {sessionLoading ? (
               <PagePermissionLoading />
-            ) : canAccessAdminPath(currentAdmin, pathname) ? (
+            ) : canAccessAdminPath(uiAdmin, pathname) ? (
               children
             ) : (
-              <PermissionDenied user={currentAdmin} />
+              <PermissionDenied pathname={pathname} user={uiAdmin} />
             )}
           </div>
         </SidebarInset>
@@ -402,8 +409,21 @@ function PagePermissionLoading() {
   );
 }
 
-function PermissionDenied({ user }: { user: AdminSessionUser | null }) {
+function SidebarMenuSkeleton() {
+  return (
+    <>
+      {[0, 1, 2, 3].map((item) => (
+        <SidebarMenuItem key={item}>
+          <div className="mx-2 my-1 h-9 animate-pulse rounded-md bg-sidebar-accent/60" />
+        </SidebarMenuItem>
+      ))}
+    </>
+  );
+}
+
+function PermissionDenied({ pathname, user }: { pathname: string; user: AdminSessionUser | null }) {
   const fallbackPath = firstAccessiblePath(user);
+  const pageName = pageLabelForPath(pathname);
   return (
     <div className="flex min-h-[55vh] flex-col items-center justify-center rounded-xl border border-dashed border-border px-6 text-center">
       <div className="grid size-12 place-items-center rounded-full bg-amber-100 text-amber-700">
@@ -411,7 +431,7 @@ function PermissionDenied({ user }: { user: AdminSessionUser | null }) {
       </div>
       <h1 className="mt-4 text-xl font-black">ไม่มีสิทธิ์เข้าถึงหน้านี้</h1>
       <p className="mt-2 max-w-md text-sm text-muted-foreground">
-        บัญชีของคุณยังไม่ได้รับสิทธิ์สำหรับหน้านี้ กรุณาติดต่อ Owner เพื่อขอสิทธิ์เพิ่มเติม
+        บัญชีของคุณยังไม่ได้รับสิทธิ์สำหรับหน้า{pageName} กรุณาติดต่อ Owner เพื่อขอสิทธิ์เพิ่มเติม
       </p>
       {fallbackPath ? (
         <Link href={fallbackPath} className="mt-5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
@@ -420,6 +440,12 @@ function PermissionDenied({ user }: { user: AdminSessionUser | null }) {
       ) : null}
     </div>
   );
+}
+
+function pageLabelForPath(pathname: string) {
+  if (pathname === "/") return "แดชบอร์ด";
+  const firstSegment = pathname.split("/").filter(Boolean)[0];
+  return firstSegment ? breadcrumbLabels[firstSegment] ?? "นี้" : "นี้";
 }
 
 function AdminBreadcrumb({ pathname }: { pathname: string }) {

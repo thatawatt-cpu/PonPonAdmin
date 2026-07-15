@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { hasPermission, useAdminSession } from "@/components/admin-permissions";
 import { ReviewMediaImage } from "@/components/review-media-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,8 @@ type SortMode = "newest" | "oldest" | "rating-high" | "rating-low" | "media";
 
 export function ReviewModerationDashboard(props: Props) {
   const router = useRouter();
+  const { user } = useAdminSession();
+  const canManageReviews = hasPermission(user, "reviews.manage");
   const [query, setQuery] = useState("");
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
@@ -149,12 +152,14 @@ export function ReviewModerationDashboard(props: Props) {
   }
 
   function toggleSelected(id: string) {
+    if (!canManageReviews) return;
     setSelectedIds((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
     );
   }
 
   function toggleAllVisible() {
+    if (!canManageReviews) return;
     const visibleIds = visibleReviews.map((review) => review.id);
     setSelectedIds((current) =>
       allVisibleSelected
@@ -164,6 +169,7 @@ export function ReviewModerationDashboard(props: Props) {
   }
 
   async function runStatusUpdate(reviewIds: string[], status: ReviewStatus) {
+    if (!canManageReviews) return;
     setPending(true);
     setFeedback(null);
     try {
@@ -191,6 +197,7 @@ export function ReviewModerationDashboard(props: Props) {
   }
 
   async function deleteReview(review: AdminReview) {
+    if (!canManageReviews) return;
     setPending(true);
     setFeedback(null);
     try {
@@ -246,7 +253,7 @@ export function ReviewModerationDashboard(props: Props) {
         />
       </section>
 
-      {selectedIds.length > 0 ? (
+      {canManageReviews && selectedIds.length > 0 ? (
         <BulkToolbar
           count={selectedIds.length}
           disabled={pending || selectedReviews.some((review) => review.isDeleted)}
@@ -278,12 +285,13 @@ export function ReviewModerationDashboard(props: Props) {
         />
       ) : (
         <section className="space-y-3" aria-label="รายการรีวิว">
-          <label className="flex min-h-11 items-center gap-3 px-1 text-sm font-semibold text-muted-foreground">
+          {canManageReviews ? <label className="flex min-h-11 items-center gap-3 px-1 text-sm font-semibold text-muted-foreground">
             <input className="size-4 accent-foreground" type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} />
             เลือกรายการที่แสดงทั้งหมด ({visibleReviews.length.toLocaleString("th-TH")})
-          </label>
+          </label> : null}
           {visibleReviews.map((review) => (
             <ReviewCard
+              canManage={canManageReviews}
               key={review.id}
               checked={selectedIds.includes(review.id)}
               disabled={pending}
@@ -365,11 +373,11 @@ function FilterToolbar({ query, rating, mediaFilter, sortMode, onQueryChange, on
   );
 }
 
-function ReviewCard({ review, checked, disabled, onChecked, onDetail, onMedia, onStatus, onDelete }: { review: AdminReview; checked: boolean; disabled: boolean; onChecked: () => void; onDetail: () => void; onMedia: (index: number) => void; onStatus: (status: ReviewStatus) => void; onDelete: () => void }) {
+function ReviewCard({ review, checked, disabled, canManage, onChecked, onDetail, onMedia, onStatus, onDelete }: { review: AdminReview; checked: boolean; disabled: boolean; canManage: boolean; onChecked: () => void; onDetail: () => void; onMedia: (index: number) => void; onStatus: (status: ReviewStatus) => void; onDelete: () => void }) {
   return (
     <article className={cn("group rounded-xl border border-border bg-card p-4 transition-colors hover:border-foreground/25 hover:bg-muted/10 sm:p-5", review.isDeleted && "opacity-70")}>
       <div className="flex items-start gap-3 sm:gap-4">
-        <input type="checkbox" className="mt-3 size-4 shrink-0 accent-foreground" aria-label={`เลือกรีวิวของ ${review.userName}`} checked={checked} onChange={onChecked} />
+        {canManage ? <input type="checkbox" className="mt-3 size-4 shrink-0 accent-foreground" aria-label={`เลือกรีวิวของ ${review.userName}`} checked={checked} onChange={onChecked} /> : null}
         <Avatar review={review} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -393,8 +401,8 @@ function ReviewCard({ review, checked, disabled, onChecked, onDetail, onMedia, o
             <div className="flex flex-wrap items-center gap-2">
               {review.productSlug ? <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={`/products/${review.productSlug}`} />}><Package />ดูสินค้า</Button> : null}
               {review.orderId ? <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={`/orders/${review.orderId}`} />}><ShoppingBag />ดูออเดอร์</Button> : null}
-              {!review.isDeleted ? <Button variant="outline" size="sm" disabled={disabled} onClick={() => onStatus(review.status === "published" ? "hidden" : "published")}>{review.status === "published" ? <EyeOff /> : <Eye />}{review.status === "published" ? "ซ่อนจากหน้าร้าน" : "เผยแพร่บนหน้าร้าน"}</Button> : null}
-              <ReviewOverflow review={review} onDetail={onDetail} onDelete={onDelete} />
+              {canManage && !review.isDeleted ? <Button variant="outline" size="sm" disabled={disabled} onClick={() => onStatus(review.status === "published" ? "hidden" : "published")}>{review.status === "published" ? <EyeOff /> : <Eye />}{review.status === "published" ? "ซ่อนจากหน้าร้าน" : "เผยแพร่บนหน้าร้าน"}</Button> : null}
+              <ReviewOverflow review={review} canManage={canManage} onDetail={onDetail} onDelete={onDelete} />
             </div>
           </div>
         </div>
@@ -430,8 +438,8 @@ function MediaThumbnail({ media, productName, index }: { media: AdminReviewMedia
   return <><video src={media.url} poster={media.thumbnailUrl ?? undefined} preload="metadata" muted playsInline aria-label={`วิดีโอรีวิว ${productName} ลำดับที่ ${index + 1}`} className="size-full object-cover" /><span className="pointer-events-none absolute inset-0 grid place-items-center bg-black/15"><span className="grid size-8 place-items-center rounded-full bg-black/70 text-white"><Play className="ml-0.5 size-4 fill-current" /></span></span></>;
 }
 
-function ReviewOverflow({ review, onDetail, onDelete }: { review: AdminReview; onDetail: () => void; onDelete: () => void }) {
-  return <DropdownMenu><DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`คำสั่งเพิ่มเติมสำหรับรีวิวของ ${review.userName}`} />}><MoreHorizontal /></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48"><DropdownMenuItem onClick={onDetail}><MessageSquareText />ดูรายละเอียด</DropdownMenuItem>{review.productSlug ? <DropdownMenuItem render={<Link href={`/products/${review.productSlug}`} />}><Package />ดูสินค้า</DropdownMenuItem> : null}{review.orderId ? <DropdownMenuItem render={<Link href={`/orders/${review.orderId}`} />}><ShoppingBag />ดูออเดอร์</DropdownMenuItem> : null}<DropdownMenuItem onClick={() => void navigator.clipboard.writeText(review.id)}><Copy />คัดลอก Review ID</DropdownMenuItem>{!review.isDeleted ? <><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={onDelete}><Trash2 />ลบรีวิว</DropdownMenuItem></> : null}</DropdownMenuContent></DropdownMenu>;
+function ReviewOverflow({ review, canManage, onDetail, onDelete }: { review: AdminReview; canManage: boolean; onDetail: () => void; onDelete: () => void }) {
+  return <DropdownMenu><DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`คำสั่งเพิ่มเติมสำหรับรีวิวของ ${review.userName}`} />}><MoreHorizontal /></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-48"><DropdownMenuItem onClick={onDetail}><MessageSquareText />ดูรายละเอียด</DropdownMenuItem>{review.productSlug ? <DropdownMenuItem render={<Link href={`/products/${review.productSlug}`} />}><Package />ดูสินค้า</DropdownMenuItem> : null}{review.orderId ? <DropdownMenuItem render={<Link href={`/orders/${review.orderId}`} />}><ShoppingBag />ดูออเดอร์</DropdownMenuItem> : null}<DropdownMenuItem onClick={() => void navigator.clipboard.writeText(review.id)}><Copy />คัดลอก Review ID</DropdownMenuItem>{canManage && !review.isDeleted ? <><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={onDelete}><Trash2 />ลบรีวิว</DropdownMenuItem></> : null}</DropdownMenuContent></DropdownMenu>;
 }
 
 function BulkToolbar({ count, disabled, onClear, onStatus }: { count: number; disabled: boolean; onClear: () => void; onStatus: (status: ReviewStatus) => void }) {

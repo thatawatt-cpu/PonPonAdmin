@@ -28,11 +28,13 @@ async function extractErrorMessage(res: Response, fallback: string) {
 
 export function CouponCard({
   coupon,
+  onDeleted,
   onSelectedChange,
   selectable = false,
   selected = false,
 }: {
   coupon: Coupon;
+  onDeleted?: (id: string) => void;
   onSelectedChange?: (checked: boolean) => void;
   selectable?: boolean;
   selected?: boolean;
@@ -132,7 +134,11 @@ export function CouponCard({
         method: "DELETE",
       });
       if (!res.ok) throw new Error(await extractErrorMessage(res, "ลบคูปองไม่สำเร็จ"));
-      router.refresh();
+      if (onDeleted) {
+        onDeleted(coupon.id);
+      } else {
+        router.refresh();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "ลบคูปองไม่สำเร็จ");
       setDeleting(false);

@@ -10,6 +10,7 @@ export type AdminPermission =
   | "products.read"
   | "products.manage"
   | "customers.read"
+  | "reviews.read"
   | "reviews.manage"
   | "marketing.manage"
   | "integrations.read"
@@ -69,6 +70,10 @@ export function hasPermission(
   user: AdminSessionUser | null,
   permission: AdminPermission,
 ) {
+  if (permission === "reviews.read" && user?.permissions.includes("reviews.manage")) {
+    return true;
+  }
+
   return Boolean(
     user?.permissions.includes("*") || user?.permissions.includes(permission),
   );
@@ -95,7 +100,7 @@ export function firstAccessiblePath(user: AdminSessionUser | null) {
     ["/orders", "orders.read"],
     ["/products", "products.read"],
     ["/customers", "customers.read"],
-    ["/reviews", "reviews.manage"],
+    ["/reviews", "reviews.read"],
     ["/promotions", "marketing.manage"],
     ["/integrations/zort", "integrations.read"],
   ];
@@ -109,7 +114,7 @@ function permissionsForPath(pathname: string): AdminPermission[] {
   if (/^\/products\/[^/]+\/edit/.test(pathname)) return ["products.manage"];
   if (pathname.startsWith("/products")) return ["products.read"];
   if (pathname.startsWith("/customers")) return ["customers.read"];
-  if (pathname.startsWith("/reviews")) return ["reviews.manage"];
+  if (pathname.startsWith("/reviews")) return ["reviews.read", "reviews.manage"];
   if (
     pathname.startsWith("/promotions") ||
     pathname.startsWith("/coupons") ||

@@ -11,7 +11,7 @@ export type DashboardOrder = {
   orderDate: string | null;
 };
 
-export type DashboardPeriod = "day" | "month" | "year";
+export type DashboardPeriod = "day" | "week" | "month" | "year";
 
 export type DashboardAttentionProduct = {
   id: string;
@@ -67,12 +67,31 @@ export type DashboardData = {
     excessPayment: number;
     voided: number;
   };
+  shipping: {
+    inTransit: number;
+    delivered: number;
+    returned: number;
+    total: number;
+    latest: DashboardShippingItem[];
+  };
   zortSync: {
     succeeded: number;
     pending: number;
     failed: number;
     lastSuccessfulAt: string | null;
   };
+};
+
+export type DashboardShippingItem = {
+  id: string;
+  orderId: string | null;
+  orderNumber: string | null;
+  customerName: string | null;
+  carrier: string | null;
+  trackingNo: string | null;
+  status: "in_transit" | "delivered" | "returned" | string;
+  statusLabel: string;
+  updatedAt: string | null;
 };
 
 export type DashboardSyncRun = {
@@ -198,7 +217,102 @@ function normalizeDashboardData(value: unknown): DashboardData {
       lowStockThreshold: Number(inventory.lowStockThreshold ?? 5),
       outOfStock: Number(inventory.outOfStock ?? 0),
     },
+    shipping: normalizeShippingSummary(data.shipping ?? (data as unknown as UnknownRecord).delivery),
   };
+}
+
+function normalizeShippingSummary(value: unknown): DashboardData["shipping"] {
+  const record = isRecord(value) ? value : {};
+  const inTransit = numberFromKeys(record, [
+    "inTransit",
+    "shipping",
+    "delivering",
+    "inTransitCount",
+    "shippingCount",
+  ]);
+  const delivered = numberFromKeys(record, [
+    "delivered",
+    "deliveryCompleted",
+    "completed",
+    "deliveredCount",
+    "successCount",
+  ]);
+  const returned = numberFromKeys(record, [
+    "returned",
+    "return",
+    "returnedCount",
+    "returnCount",
+    "returnToSender",
+    "returnedToSender",
+    "returnToSenderCount",
+    "returnedToSenderCount",
+    "failedShipment",
+    "failedShipmentCount",
+  ]);
+
+  return {
+    delivered,
+    inTransit,
+    latest: normalizeShippingItems(record.latest ?? record.items ?? record.recent),
+    returned,
+    total: numberFromKeys(record, ["total", "totalItems", "count"], inTransit + delivered + returned),
+  };
+}
+
+function normalizeShippingItems(value: unknown): DashboardShippingItem[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.slice(0, 5).map((item) => {
+    const record = isRecord(item) ? item : {};
+    const status = String(record.status ?? record.shippingStatus ?? "");
+    return {
+      id: String(record.id ?? record.orderId ?? record.trackingNo ?? ""),
+      orderId: stringOrNull(record.orderId ?? record.id),
+      orderNumber: stringOrNull(record.orderNumber ?? record.number),
+      customerName: stringOrNull(record.customerName ?? record.customer),
+      carrier: stringOrNull(record.carrier ?? record.shippingCarrier ?? record.shippingChannel),
+      trackingNo: stringOrNull(record.trackingNo ?? record.trackingNumber),
+      status: normalizeShippingStatus(status),
+      statusLabel: String(record.statusLabel ?? shippingStatusLabel(status)),
+      updatedAt: stringOrNull(record.updatedAt ?? record.updatedAtUtc ?? record.shippingDate ?? record.shippedAt ?? record.deliveredAt ?? record.orderDate),
+    };
+  });
+}
+
+function normalizeShippingStatus(status: string) {
+  const normalized = status.trim().replace(/[\s-]/g, "_").toLowerCase();
+  if (["intransit", "in_transit", "shipping", "delivering", "pickedup", "picked_up", "carrier_picked_up", "carrier_accepted"].includes(normalized)) {
+    return "in_transit";
+  }
+  if (["delivered", "completed", "success", "delivery_completed"].includes(normalized)) {
+    return "delivered";
+  }
+  if (["returned", "return", "failedshipment", "failed_shipment", "return_to_sender", "returned_to_sender", "rts"].includes(normalized)) {
+    return "returned";
+  }
+  return normalized || status;
+}
+
+function shippingStatusLabel(status: string) {
+  const normalized = normalizeShippingStatus(status);
+  if (normalized === "in_transit") return "กำลังจัดส่ง";
+  if (normalized === "delivered") return "ส่งสำเร็จแล้ว";
+  if (normalized === "returned") return "สินค้าตีกลับ";
+  return status || "ไม่ระบุสถานะ";
+}
+
+function numberFromKeys(record: UnknownRecord, keys: string[], fallback = 0) {
+  for (const key of keys) {
+    const value = record[key];
+    if (value !== undefined && value !== null) return Number(value) || 0;
+  }
+  return fallback;
+}
+
+function stringOrNull(value: unknown) {
+  if (value === undefined || value === null) return null;
+  const text = String(value);
+  return text ? text : null;
 }
 
 function normalizeAttentionProducts(

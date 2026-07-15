@@ -23,9 +23,6 @@ const settings: Array<{
 }> = [
   { id: "store", title: "ข้อมูลร้าน", description: "ชื่อร้าน โลโก้ เบอร์โทร และช่องทางติดต่อ", permission: "settings.manage" },
   { id: "shipping", title: "ผู้ส่ง SHIPPOP", description: "ชื่อ เบอร์โทร อีเมล และที่อยู่ต้นทางสำหรับจัดส่ง", permission: "settings.manage" },
-  { id: "payment", title: "การชำระเงิน", description: "PromptPay เก็บเงินปลายทาง และการตรวจหลักฐาน", permission: "settings.manage" },
-  { id: "line", title: "LINE LIFF", description: "LIFF ID, Channel ID และสถานะการเชื่อมต่อ", permission: "settings.manage" },
-  { id: "notifications", title: "การแจ้งเตือน", description: "ออเดอร์ใหม่ สลิปรอตรวจ และสินค้าสต็อกต่ำ", permission: "settings.manage" },
   { id: "integrations", title: "Integrations", description: "LINE, ZORT Webhook, SHIPPOP, OMISE และ SUPABASE", permission: "integrations.read" },
   { id: "admins", title: "ผู้ดูแลระบบ", description: "สร้างบัญชี กำหนด Role และสิทธิ์การใช้งาน", permission: "admin_users.read" },
 ];

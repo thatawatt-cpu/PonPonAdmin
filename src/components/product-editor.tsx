@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { hasPermission, useAdminSession } from "@/components/admin-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,6 +72,8 @@ export function ProductEditor({
   product: AdminProduct;
   variants: AdminProduct[];
 }) {
+  const { user } = useAdminSession();
+  const canManage = hasPermission(user, "products.manage");
   const [active, setActive] = useState(product.isVisibleOnLiff);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -191,6 +194,11 @@ export function ProductEditor({
   };
 
   const save = async () => {
+    if (!canManage) {
+      setSaveError("บัญชีนี้ไม่มีสิทธิ์จัดการสินค้า");
+      return;
+    }
+
     setSaving(true);
     setSaveError("");
     try {
@@ -322,6 +330,11 @@ export function ProductEditor({
   };
 
   const toggleVisibility = async () => {
+    if (!canManage) {
+      setSaveError("บัญชีนี้ไม่มีสิทธิ์จัดการสินค้า");
+      return;
+    }
+
     const next = !active;
     setActive(next);
     await fetch(`/api/backend/admin/products/${id}/visibility`, {
@@ -346,14 +359,14 @@ export function ProductEditor({
               <Button type="button" variant="ghost" size="sm" onClick={() => window.location.href = "/products"}>
                 ยกเลิก
               </Button>
-              <Button type="button" size="sm" onClick={save} disabled={saving}>
+              <Button type="button" size="sm" onClick={save} disabled={saving || !canManage}>
                 {saving && (
                   <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
                     <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                 )}
-                {saving ? "กำลังบันทึก..." : saved ? "✓ บันทึกแล้ว" : "บันทึกการแก้ไข"}
+                {saving ? "กำลังบันทึก..." : saved ? "✓ บันทึกแล้ว" : canManage ? "บันทึกการแก้ไข" : "ไม่มีสิทธิ์แก้ไข"}
               </Button>
           </>
         }
@@ -562,6 +575,7 @@ export function ProductEditor({
                     <Label className="cursor-pointer text-sm font-medium">{label}</Label>
                     <Switch
                       checked={enabled}
+                      disabled={!canManage}
                       onCheckedChange={() => onClick()}
                     />
                   </div>

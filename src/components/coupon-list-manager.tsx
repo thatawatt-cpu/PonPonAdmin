@@ -25,6 +25,8 @@ type DeleteRequest = {
   label: string;
 } | null;
 
+const DELETE_BATCH_SIZE = 50;
+
 export function CouponListManager({
   allMatchingIds,
   coupons,
@@ -90,8 +92,8 @@ export function CouponListManager({
     setError("");
     const failedIds: string[] = [];
 
-    for (let index = 0; index < deleteRequest.ids.length; index += 10) {
-      const batch = deleteRequest.ids.slice(index, index + 10);
+    for (let index = 0; index < deleteRequest.ids.length; index += DELETE_BATCH_SIZE) {
+      const batch = deleteRequest.ids.slice(index, index + DELETE_BATCH_SIZE);
       const results = await Promise.allSettled(
         batch.map(async (id) => {
           const response = await fetch(`/api/backend/admin/coupons/${id}`, {
@@ -236,6 +238,14 @@ export function CouponListManager({
                 <CouponCard
                   key={coupon.id}
                   coupon={coupon}
+                  onDeleted={(id) => {
+                    setRemovedIds((current) => new Set(current).add(id));
+                    setSelectedIds((current) => {
+                      const next = new Set(current);
+                      next.delete(id);
+                      return next;
+                    });
+                  }}
                   selectable
                   selected={selectedIds.has(coupon.id)}
                   onSelectedChange={(checked) => toggleCoupon(coupon.id, checked)}

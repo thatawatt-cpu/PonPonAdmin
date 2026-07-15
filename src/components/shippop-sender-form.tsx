@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { CheckCircle2, Info } from "lucide-react";
+import { hasPermission, useAdminSession } from "@/components/admin-permissions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,8 @@ const EMPTY_SENDER: SenderFields = {
 };
 
 export function ShippopSenderForm() {
+  const { user } = useAdminSession();
+  const canManage = hasPermission(user, "settings.manage");
   const [sender, setSender] = useState<SenderFields>(EMPTY_SENDER);
   const [isConfigured, setIsConfigured] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -106,6 +109,14 @@ export function ShippopSenderForm() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canManage) {
+      setFeedback({
+        kind: "error",
+        message: "บัญชีนี้ไม่มีสิทธิ์จัดการตั้งค่าผู้ส่ง SHIPPOP",
+      });
+      return;
+    }
+
     setIsSaving(true);
     setFeedback(null);
 
@@ -190,7 +201,7 @@ export function ShippopSenderForm() {
 
             <fieldset
               className="grid gap-4 sm:grid-cols-2"
-              disabled={isSaving}
+              disabled={isSaving || !canManage}
             >
               <div className="space-y-2">
                 <Label htmlFor="shippop-sender-name">ชื่อผู้ส่ง/ร้าน</Label>
@@ -321,8 +332,17 @@ export function ShippopSenderForm() {
               </Alert>
             ) : null}
 
+            {!canManage ? (
+              <Alert>
+                <Info />
+                <AlertDescription>
+                  บัญชีนี้ดูข้อมูลผู้ส่ง SHIPPOP ได้ แต่ไม่มีสิทธิ์แก้ไขหรือบันทึก
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
             <div className="flex justify-end">
-              <Button type="submit" disabled={isSaving}>
+              <Button type="submit" disabled={isSaving || !canManage}>
                 {isSaving ? (
                   <>
                     <Spinner />

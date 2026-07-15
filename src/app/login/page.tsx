@@ -6,12 +6,6 @@ export const metadata: Metadata = {
   description: "เข้าสู่ระบบหรือตั้งค่าผู้ดูแลคนแรกสำหรับร้าน PonPon",
 };
 
-const activity = [
-  { label: "ออเดอร์วันนี้", value: "36" },
-  { label: "รอตรวจสลิป", value: "8" },
-  { label: "สินค้าใกล้หมด", value: "5" },
-];
-
 export default function LoginPage() {
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -42,19 +36,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div className="relative grid grid-cols-3 gap-3">
-            {activity.map((item) => (
-              <div
-                key={item.label}
-                className="rounded-xl bg-white/8 p-4 ring-1 ring-white/12 backdrop-blur"
-              >
-                <p className="text-2xl font-black">{item.value}</p>
-                <p className="mt-1 text-xs text-white/60">
-                  {item.label}
-                </p>
-              </div>
-            ))}
-          </div>
+          <div className="relative" />
         </section>
 
         <section className="flex min-h-screen items-center justify-center px-4 py-10 sm:px-6">

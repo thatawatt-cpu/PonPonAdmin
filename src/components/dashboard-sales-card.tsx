@@ -24,6 +24,7 @@ const salesPeriodOptions: Array<{
   value: DashboardPeriod;
 }> = [
   { label: "วันนี้", value: "day" },
+  { label: "อาทิตย์นี้", value: "week" },
   { label: "เดือนนี้", value: "month" },
   { label: "ปีนี้", value: "year" },
 ];

@@ -3,6 +3,7 @@
 import { Eye, EyeOff, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { hasPermission, useAdminSession } from "@/components/admin-permissions";
 import { Button } from "@/components/ui/button";
 import type { ReviewStatus } from "@/lib/admin-reviews";
 
@@ -16,8 +17,12 @@ export function ReviewActions({
   isDeleted: boolean;
 }) {
   const router = useRouter();
+  const { user } = useAdminSession();
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const canManage = hasPermission(user, "reviews.manage");
+
+  if (!canManage) return null;
 
   async function updateStatus(nextStatus: ReviewStatus) {
     setPendingAction(nextStatus);

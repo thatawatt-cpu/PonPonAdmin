@@ -56,6 +56,7 @@ type Permission =
   | "products.read"
   | "products.manage"
   | "customers.read"
+  | "reviews.read"
   | "reviews.manage"
   | "marketing.manage"
   | "integrations.read"
@@ -124,6 +125,7 @@ const permissionGroups: Array<{
       { value: "products.read", label: "ดูสินค้า" },
       { value: "products.manage", label: "จัดการสินค้า" },
       { value: "customers.read", label: "ดูข้อมูลลูกค้า" },
+      { value: "reviews.read", label: "ดูรีวิว" },
       { value: "reviews.manage", label: "จัดการรีวิว" },
     ],
   },
@@ -148,6 +150,19 @@ const permissionGroups: Array<{
 const allPermissions = permissionGroups.flatMap((group) =>
   group.items.map((item) => item.value),
 );
+
+const staffDefaultPermissions: Permission[] = [
+  "dashboard.read",
+  "orders.read",
+  "orders.manage",
+  "products.read",
+  "products.manage",
+  "customers.read",
+  "reviews.read",
+  "reviews.manage",
+];
+
+const staffAllowedPermissionSet = new Set<Permission>(staffDefaultPermissions);
 
 export function AdminUsersManager() {
   const router = useRouter();
@@ -459,7 +474,7 @@ function UserEditorDialog({ mode, open, user, currentAdmin, onOpenChange, onSave
           nextRole === "Owner" || nextRole === "Admin"
             ? allPermissions
             : enteringStaff
-              ? []
+              ? staffDefaultPermissions
               : current.permissions,
       };
     });
@@ -497,12 +512,12 @@ function UserEditorDialog({ mode, open, user, currentAdmin, onOpenChange, onSave
             displayName: form.displayName.trim(),
             email: form.email.trim(),
             password: form.password,
-            permissions: form.role === "Owner" ? ["*"] : form.permissions,
+            permissions: permissionPayloadForRole(form.role, form.permissions),
             role: form.role,
           }
         : {
             displayName: form.displayName.trim(),
-            permissions: form.role === "Owner" ? ["*"] : form.permissions,
+            permissions: permissionPayloadForRole(form.role, form.permissions),
             role: form.role,
             status: form.status,
           };
@@ -552,7 +567,7 @@ function UserEditorDialog({ mode, open, user, currentAdmin, onOpenChange, onSave
             {mode === "edit" ? <div className="space-y-2"><Label htmlFor="edit-status">สถานะ</Label><NativeSelect id="edit-status" className="w-full" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as AdminStatus }))}><NativeSelectOption value="Active">ใช้งาน</NativeSelectOption><NativeSelectOption value="Disabled">ปิดใช้งาน</NativeSelectOption></NativeSelect></div> : null}
           </div>
 
-          <PermissionPicker role={form.role} permissions={form.permissions} onToggle={togglePermission} onSelectAll={() => setForm((current) => ({ ...current, permissions: allPermissions }))} onClear={() => setForm((current) => ({ ...current, permissions: [] }))} />
+          <PermissionPicker role={form.role} permissions={form.permissions} onToggle={togglePermission} onSelectAll={() => setForm((current) => ({ ...current, permissions: permissionsForRole(current.role) }))} onClear={() => setForm((current) => ({ ...current, permissions: [] }))} />
 
           {error ? <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p> : null}
           <div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={saving} onClick={() => onOpenChange(false)}>ยกเลิก</Button><Button type="submit" disabled={saving}>{saving ? <Spinner /> : <ShieldCheck />}{saving ? "กำลังบันทึก..." : mode === "create" ? "สร้างบัญชี" : "บันทึกการเปลี่ยนแปลง"}</Button></div>
@@ -564,7 +579,18 @@ function UserEditorDialog({ mode, open, user, currentAdmin, onOpenChange, onSave
 
 function PermissionPicker({ role, permissions, onToggle, onSelectAll, onClear }: { role: AdminRole; permissions: Permission[]; onToggle: (permission: Permission) => void; onSelectAll: () => void; onClear: () => void }) {
   const disabled = role === "Owner";
-  return <section className="rounded-lg border border-border p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold">สิทธิ์การใช้งาน</h3><p className="text-xs text-muted-foreground">{disabled ? "Owner มีสิทธิ์ทั้งหมดโดยอัตโนมัติ" : `เลือกแล้ว ${permissions.length} จาก ${allPermissions.length} สิทธิ์`}</p></div>{!disabled ? <div className="flex gap-1"><Button type="button" variant="ghost" size="xs" onClick={onSelectAll}>เลือกทั้งหมด</Button><Button type="button" variant="ghost" size="xs" onClick={onClear}>ล้าง</Button></div> : null}</div><div className="mt-4 grid gap-4 sm:grid-cols-2">{permissionGroups.map((group) => <fieldset key={group.label} className="space-y-2"><legend className="mb-2 text-xs font-bold text-muted-foreground">{group.label}</legend>{group.items.map((item) => <label key={item.value} className={cn("flex min-h-10 items-center gap-2 rounded-md px-2 text-sm", disabled ? "bg-muted/50 text-muted-foreground" : "hover:bg-muted/50")}><input type="checkbox" className="size-4 accent-foreground" checked={disabled || permissions.includes(item.value)} disabled={disabled} onChange={() => onToggle(item.value)} /><span>{item.label}</span><code className="ml-auto hidden text-[10px] text-muted-foreground xl:inline">{item.value}</code></label>)}</fieldset>)}</div></section>;
+  const visibleGroups = permissionGroups
+    .map((group) => ({
+      ...group,
+      items: role === "Staff"
+        ? group.items.filter((item) => staffAllowedPermissionSet.has(item.value))
+        : group.items,
+    }))
+    .filter((group) => group.items.length > 0);
+  const visiblePermissions = visibleGroups.flatMap((group) => group.items.map((item) => item.value));
+  const selectedCount = normalizePermissionsForRole(role, permissions).length;
+
+  return <section className="rounded-lg border border-border p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold">สิทธิ์การใช้งาน</h3><p className="text-xs text-muted-foreground">{disabled ? "Owner มีสิทธิ์ทั้งหมดโดยอัตโนมัติ" : `เลือกแล้ว ${selectedCount} จาก ${visiblePermissions.length} สิทธิ์`}</p></div>{!disabled ? <div className="flex gap-1"><Button type="button" variant="ghost" size="xs" onClick={onSelectAll}>เลือกทั้งหมด</Button><Button type="button" variant="ghost" size="xs" onClick={onClear}>ล้าง</Button></div> : null}</div><div className="mt-4 grid gap-4 sm:grid-cols-2">{visibleGroups.map((group) => <fieldset key={group.label} className="space-y-2"><legend className="mb-2 text-xs font-bold text-muted-foreground">{group.label}</legend>{group.items.map((item) => <label key={item.value} className={cn("flex min-h-10 items-center gap-2 rounded-md px-2 text-sm", disabled ? "bg-muted/50 text-muted-foreground" : "hover:bg-muted/50")}><input type="checkbox" className="size-4 accent-foreground" checked={disabled || permissions.includes(item.value)} disabled={disabled} onChange={() => onToggle(item.value)} /><span>{item.label}</span><code className="ml-auto hidden text-[10px] text-muted-foreground xl:inline">{item.value}</code></label>)}</fieldset>)}</div></section>;
 }
 
 function ResetPasswordDialog({ user, onOpenChange, onSaved }: { user: AdminUser | null; onOpenChange: (open: boolean) => void; onSaved: () => void }) {
@@ -603,8 +629,22 @@ function PermissionSummary({ permissions }: { permissions: string[] }) { if (per
 function UsersSkeleton() { return <div className="space-y-2">{[0,1,2,3].map((item) => <Skeleton key={item} className="h-16 w-full rounded-lg" />)}</div>; }
 function StatePanel({ icon, title, description, action }: { icon: React.ReactNode; title: string; description: string; action?: React.ReactNode }) { return <div className="flex min-h-56 flex-col items-center justify-center rounded-lg border border-dashed border-border px-5 text-center"><span className="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground [&_svg]:size-5">{icon}</span><h3 className="mt-3 font-black">{title}</h3><p className="mt-1 max-w-md text-sm text-muted-foreground">{description}</p>{action ? <div className="mt-4">{action}</div> : null}</div>; }
 
-function formFromUser(user?: AdminUser | null): UserForm { return { displayName: user?.displayName ?? "", email: user?.email ?? "", password: "", permissions: sanitizePermissions(user?.permissions), role: user?.role ?? "Staff", status: user?.status ?? "Active" }; }
+function formFromUser(user?: AdminUser | null): UserForm {
+  const role = user?.role ?? "Staff";
+  return { displayName: user?.displayName ?? "", email: user?.email ?? "", password: "", permissions: user ? normalizePermissionsForRole(role, user.permissions) : staffDefaultPermissions, role, status: user?.status ?? "Active" };
+}
 function sanitizePermissions(permissions?: string[]) { return (permissions ?? []).filter((permission): permission is Permission => allPermissions.includes(permission as Permission)); }
+function permissionsForRole(role: AdminRole) { return role === "Staff" ? staffDefaultPermissions : allPermissions; }
+function normalizePermissionsForRole(role: AdminRole, permissions?: string[]) {
+  const sanitized = sanitizePermissions(permissions);
+  if (role !== "Staff") return sanitized;
+  const staffPermissions = sanitized.filter((permission) => staffAllowedPermissionSet.has(permission));
+  if (sanitized.includes("reviews.manage") && !staffPermissions.includes("reviews.read")) {
+    staffPermissions.push("reviews.read");
+  }
+  return staffPermissions;
+}
+function permissionPayloadForRole(role: AdminRole, permissions: Permission[]) { return role === "Owner" ? ["*"] : normalizePermissionsForRole(role, permissions); }
 function hasPermission(user: CurrentAdmin | null, permission: Permission) { return Boolean(user?.permissions.includes("*") || user?.permissions.includes(permission)); }
 function samePermissions(left: string[], right: string[]) { return [...left].sort().join("|") === sanitizePermissions(right).sort().join("|"); }
 function initials(value: string) { const trimmed = value.trim(); return trimmed ? trimmed.slice(0, 2).toUpperCase() : "A"; }

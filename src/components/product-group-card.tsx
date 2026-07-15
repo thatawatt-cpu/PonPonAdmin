@@ -131,7 +131,7 @@ export function ProductGroupCard({ group }: { group: ProductGroup }) {
           {canManage ? (
             <Link href={`/products/${primary.parentProductId ?? primary.id}/edit`} className={buttonVariants({ size: "sm" })}>
               <Settings className="size-3.5" />
-              {isVariantGroup ? "จัดการ" : "แก้ไข"}
+              แก้ไข
             </Link>
           ) : null}
         </div>

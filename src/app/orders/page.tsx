@@ -61,6 +61,30 @@ type OrdersPageData = {
 
 const PAGE_SIZE = 20;
 
+type OrderStatus =
+  | "pending_payment"
+  | "paid"
+  | "packing"
+  | "packed"
+  | "shipped"
+  | "completed"
+  | "cancelled"
+  | "refund_requested"
+  | "refunded";
+
+const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  pending_payment: "รอชำระเงิน",
+  paid: "รอจัดเตรียม",
+  packing: "กำลังแพ็ก",
+  packed: "แพ็กแล้ว",
+  shipped: "จัดส่งแล้ว",
+  completed: "สำเร็จ",
+  cancelled: "ยกเลิก",
+  refund_requested: "ขอคืนเงิน/คืนสินค้า",
+  refunded: "คืนเงินแล้ว",
+};
+const PACKING_TAB_LABEL = "รอจัดเตรียม/กำลังแพ็ก";
+
 function parsePage(value: string | null) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
@@ -69,24 +93,19 @@ function parsePage(value: string | null) {
 type OrderFilter = {
   key: string;
   label: string;
-  status?: string;
-  paymentStatus?: string;
-  returnRequestStatus?: string;
-  refundRequestStatus?: string;
-  afterSales?: boolean;
+  status?: OrderStatus;
 };
 
-const ORDER_FILTERS: OrderFilter[] = [
+const ORDER_STATUS_TABS: OrderFilter[] = [
   { key: "all", label: "ทั้งหมด" },
-  { key: "packing", label: "แพ็กแล้ว", status: "Packed" },
-  { key: "shipped", label: "จัดส่งแล้ว", status: "Shipping" },
-  { key: "completed", label: "สำเร็จ", status: "Success" },
-  { key: "cancelled", label: "ยกเลิก", status: "Voided" },
-  {
-    key: "returns-refunds",
-    label: "คืนสินค้า/คืนเงิน",
-    afterSales: true,
-  },
+  { key: "pending-payment", label: ORDER_STATUS_LABEL.pending_payment, status: "pending_payment" },
+  { key: "packing", label: PACKING_TAB_LABEL, status: "packing" },
+  { key: "packed", label: ORDER_STATUS_LABEL.packed, status: "packed" },
+  { key: "shipped", label: ORDER_STATUS_LABEL.shipped, status: "shipped" },
+  { key: "completed", label: ORDER_STATUS_LABEL.completed, status: "completed" },
+  { key: "cancelled", label: ORDER_STATUS_LABEL.cancelled, status: "cancelled" },
+  { key: "refund-requested", label: ORDER_STATUS_LABEL.refund_requested, status: "refund_requested" },
+  { key: "refunded", label: ORDER_STATUS_LABEL.refunded, status: "refunded" },
 ];
 
 function formatDate(iso: string) {
@@ -109,22 +128,40 @@ function statusClass(status: string) {
     return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300";
   }
   if (["shipping", "shipped", "จัดส่งแล้ว", "กำลังจัดส่ง"].includes(normalized)) {
-    return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300";
+    return "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300";
   }
-  if (["packed", "แพ็กแล้ว", "กำลังแพ็ก"].includes(normalized)) {
+  if (["packed", "แพ็กแล้ว", "แพ็คแล้ว"].includes(normalized)) {
     return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300";
   }
-  if (["waiting", "pending", "รอตรวจสอบ", "รอตรวจสลิป"].includes(normalized)) {
+  if (["paid", "waiting", "เตรียมสินค้า", "รอจัดเตรียม"].includes(normalized)) {
+    return "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300";
+  }
+  if (
+    [
+      "pending_payment",
+      "packing",
+      "pending",
+      "รอชำระเงิน",
+      "กำลังแพ็ก",
+      "กำลังแพ็ค",
+      "รอตรวจสอบ",
+      "รอตรวจสลิป",
+    ].includes(normalized)
+  ) {
     return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
   }
   if (["refunded", "คืนเงินแล้ว"].includes(normalized)) {
     return "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300";
+  }
+  if (["refund_requested", "ขอคืนเงิน/คืนสินค้า"].includes(normalized)) {
+    return "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300";
   }
   return "bg-muted text-muted-foreground";
 }
 
 function orderStatusLabel(status: string) {
   const labels: Record<string, string> = {
+    ...ORDER_STATUS_LABEL,
     Completed: "สำเร็จ",
     Packed: "แพ็กแล้ว",
     Pending: "รอดำเนินการ",
@@ -133,7 +170,7 @@ function orderStatusLabel(status: string) {
     Shipping: "กำลังจัดส่ง",
     Success: "สำเร็จ",
     Voided: "ยกเลิก",
-    Waiting: "รอตรวจสอบ",
+    Waiting: "เตรียมสินค้า",
   };
 
   return labels[status] ?? status;
@@ -146,6 +183,7 @@ function paymentStatusLabel(status: string) {
     PartialPayment: "ชำระบางส่วน",
     Pending: "รอดำเนินการ",
     Refunded: "คืนเงินแล้ว",
+    refunded: "คืนเงินแล้ว",
     Voided: "ยกเลิก",
   };
 
@@ -184,29 +222,31 @@ function canCancelOrder(order: OrderListItem) {
 }
 
 function isRefundCompleted(order: OrderListItem) {
-  const status = order.refundRequestStatus?.trim().toLowerCase();
-  return [
-    "manual_refunded",
-    "manual_refund_completed",
-    "manual_refund_succeeded",
-    "refunded",
-    "completed",
-  ].includes(status ?? "");
+  const orderStatus = order.status.trim().toLowerCase();
+  const refundStatus = order.refundRequestStatus?.trim().toLowerCase();
+  return (
+    orderStatus === "refunded" ||
+    [
+      "manual_refunded",
+      "manual_refund_completed",
+      "manual_refund_succeeded",
+      "manual_refund_success",
+      "refunded",
+      "completed",
+    ].includes(refundStatus ?? "")
+  );
 }
 
 function getActiveFilter(searchParams: { get(name: string): string | null }) {
+  const status = searchParams.get("status");
+  if (status === "paid") {
+    return ORDER_STATUS_TABS.find((filter) => filter.status === "packing") ?? ORDER_STATUS_TABS[0];
+  }
+
   return (
-    ORDER_FILTERS.find(
-      (filter) =>
-        (filter.status && filter.status === searchParams.get("status")) ||
-        (filter.paymentStatus &&
-          filter.paymentStatus === searchParams.get("paymentStatus")) ||
-        (filter.returnRequestStatus &&
-          filter.returnRequestStatus === searchParams.get("returnRequestStatus")) ||
-        (filter.refundRequestStatus &&
-          filter.refundRequestStatus === searchParams.get("refundRequestStatus")) ||
-        (filter.afterSales && searchParams.get("afterSales") === "true"),
-    ) ?? ORDER_FILTERS[0]
+    ORDER_STATUS_TABS.find(
+      (filter) => filter.status && filter.status === status,
+    ) ?? ORDER_STATUS_TABS[0]
   );
 }
 
@@ -214,95 +254,23 @@ async function getOrdersPage(keyword: string, filter: OrderFilter, page: number)
   const params = new URLSearchParams();
   if (keyword) params.set("keyword", keyword);
   if (filter.status) params.set("status", filter.status);
-  if (filter.paymentStatus) params.set("paymentStatus", filter.paymentStatus);
-  if (filter.returnRequestStatus) {
-    params.set("returnRequestStatus", filter.returnRequestStatus);
-  }
-  if (filter.refundRequestStatus) {
-    params.set("refundRequestStatus", filter.refundRequestStatus);
-  }
   params.set("page", String(page));
   params.set("pageSize", String(PAGE_SIZE));
 
-  const response = await fetch(`/api/backend/admin/orders?${params}`);
-  if (!response.ok) throw new Error("fetch failed");
-  return normalizeOrdersResponse(await response.json());
-}
-
-async function getCancelledOrders(keyword: string, filter: OrderFilter, page: number) {
-  const requiredItemCount = page * PAGE_SIZE;
-  const visibleOrders: OrderListItem[] = [];
-  let sourcePage = 1;
-  let sourceHasMore = true;
-
-  while (sourceHasMore && visibleOrders.length < requiredItemCount) {
-    const result = await getOrdersPage(keyword, filter, sourcePage);
-    visibleOrders.push(...result.items.filter((order) => !isRefundCompleted(order)));
-    sourceHasMore = pageHasMore(result, sourcePage);
-    sourcePage += 1;
+  const query = params.toString();
+  const response = await fetch(`/api/admin/orders${query ? `?${query}` : ""}`);
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(text || `fetch failed with ${response.status}`);
   }
-
-  const offset = (page - 1) * PAGE_SIZE;
-  return {
-    items: visibleOrders.slice(offset, offset + PAGE_SIZE),
-    totalItems: sourceHasMore ? requiredItemCount + 1 : visibleOrders.length,
-  };
+  if (!text.trim()) {
+    return { items: [], totalItems: 0 };
+  }
+  return normalizeOrdersResponse(JSON.parse(text));
 }
 
 async function getOrders(keyword: string, filter: OrderFilter, page: number) {
-  if (!filter.afterSales) {
-    if (filter.status?.trim().toLowerCase() === "voided") {
-      return getCancelledOrders(keyword, filter, page);
-    }
-    return getOrdersPage(keyword, filter, page);
-  }
-
-  const pages = Array.from({ length: page }, (_, index) => index + 1);
-  const [returnPages, refundPages] = await Promise.all([
-    Promise.all(
-      pages.map((currentPage) =>
-        getOrdersPage(
-          keyword,
-          { key: "return-requests", label: filter.label, returnRequestStatus: "Requested" },
-          currentPage,
-        ),
-      ),
-    ),
-    Promise.all(
-      pages.map((currentPage) =>
-        getOrdersPage(
-          keyword,
-          { key: "refunded", label: filter.label, refundRequestStatus: "manual_refunded" },
-          currentPage,
-        ),
-      ),
-    ),
-  ]);
-
-  const mergedOrders = new Map<string, OrderListItem>();
-  for (const result of [...returnPages, ...refundPages]) {
-    for (const order of result.items) mergedOrders.set(order.id, order);
-  }
-
-  const sortedOrders = [...mergedOrders.values()].sort(
-    (left, right) => new Date(right.orderDate).getTime() - new Date(left.orderDate).getTime(),
-  );
-  const offset = (page - 1) * PAGE_SIZE;
-  const returnTotal = returnPages.find((result) => result.totalItems !== null)?.totalItems;
-  const refundTotal = refundPages.find((result) => result.totalItems !== null)?.totalItems;
-  const loadedItemCount = [...returnPages, ...refundPages].reduce(
-    (total, result) => total + result.items.length,
-    0,
-  );
-  const duplicateCount = loadedItemCount - mergedOrders.size;
-
-  return {
-    items: sortedOrders.slice(offset, offset + PAGE_SIZE),
-    totalItems:
-      returnTotal !== null && returnTotal !== undefined && refundTotal !== null && refundTotal !== undefined
-        ? Math.max(0, returnTotal + refundTotal - duplicateCount)
-        : null,
-  };
+  return getOrdersPage(keyword, filter, page);
 }
 
 function normalizeOrdersResponse(value: unknown): OrdersPageData {
@@ -456,14 +424,6 @@ function OrdersPageContent() {
     params.delete("page");
 
     if (filter.status) params.set("status", filter.status);
-    if (filter.paymentStatus) params.set("paymentStatus", filter.paymentStatus);
-    if (filter.returnRequestStatus) {
-      params.set("returnRequestStatus", filter.returnRequestStatus);
-    }
-    if (filter.refundRequestStatus) {
-      params.set("refundRequestStatus", filter.refundRequestStatus);
-    }
-    if (filter.afterSales) params.set("afterSales", "true");
 
     setLoading(true);
     setPendingFilterKey(filter.key);
@@ -617,7 +577,7 @@ function OrdersPageContent() {
           role="tablist"
           aria-label="กรองออเดอร์ตามสถานะ"
         >
-          {ORDER_FILTERS.map((filter) => (
+          {ORDER_STATUS_TABS.map((filter) => (
             <button
               key={filter.key}
               type="button"
@@ -679,7 +639,7 @@ function OrdersPageContent() {
               {activeFilter.key !== "all" ? (
                 <button
                   type="button"
-                  onClick={() => handleFilter(ORDER_FILTERS[0])}
+                  onClick={() => handleFilter(ORDER_STATUS_TABS[0])}
                   disabled={loading}
                   className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-muted px-3 text-xs font-medium hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"
                 >
@@ -1077,6 +1037,15 @@ function OrderStatusStack({ order, compact = false }: { order: OrderListItem; co
     );
   }
 
+  if (order.refundRequestStatus === "manual_refund_pending") {
+    return (
+      <StatusBadge
+        className="bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300"
+        label="รอคืนเงินแบบ Manual"
+      />
+    );
+  }
+
   return (
     <div className={cn("flex gap-1.5", compact ? "flex-row flex-wrap" : "flex-col items-start")}>
       <StatusBadge className={statusClass(order.status)} label={orderStatusLabel(order.status)} />
@@ -1084,12 +1053,6 @@ function OrderStatusStack({ order, compact = false }: { order: OrderListItem; co
         <StatusBadge
           className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
           label="รอตรวจคืนสินค้า"
-        />
-      ) : null}
-      {order.refundRequestStatus === "manual_refund_pending" ? (
-        <StatusBadge
-          className="bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300"
-          label="รอคืนเงินแบบ Manual"
         />
       ) : null}
     </div>
@@ -1109,16 +1072,23 @@ function OrderRowActions({
   onCancel: () => void;
   order: OrderListItem;
 }) {
+  const [openingDetail, setOpeningDetail] = useState(false);
+
   return (
     <div className={cn("flex items-center justify-end gap-1", mobile && "justify-between")}>
       <Link
         href={`/orders/${order.id}`}
+        onClick={() => setOpeningDetail(true)}
+        aria-busy={openingDetail}
         className={cn(
           "inline-flex min-h-11 items-center justify-center gap-1 rounded-lg px-3 text-sm font-semibold ring-1 ring-border transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          openingDetail && "pointer-events-none opacity-70",
           mobile && "flex-1",
         )}
       >
-        ดูรายละเอียด <ArrowRight className="size-4" />
+        {openingDetail ? <Spinner /> : null}
+        {openingDetail ? "กำลังเปิด..." : "ดูรายละเอียด"}
+        {!openingDetail ? <ArrowRight className="size-4" /> : null}
       </Link>
       {canManage ? <DropdownMenu>
         <DropdownMenuTrigger
@@ -1134,8 +1104,11 @@ function OrderRowActions({
           <MoreHorizontal />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-44">
-          <DropdownMenuItem render={<Link href={`/orders/${order.id}`} />}>
-            ดูรายละเอียด
+          <DropdownMenuItem
+            disabled={openingDetail}
+            render={<Link href={`/orders/${order.id}`} onClick={() => setOpeningDetail(true)} />}
+          >
+            {openingDetail ? "กำลังเปิด..." : "ดูรายละเอียด"}
           </DropdownMenuItem>
           {canCancelOrder(order) ? (
             <DropdownMenuItem
@@ -1206,7 +1179,12 @@ function orderPriorityClass(order: OrderListItem) {
   }
 
   const status = orderStatusLabel(order.status);
-  if (status === "รอตรวจสอบ" || status === "รอดำเนินการ" || status === "กำลังแพ็ก") {
+  if (
+    status === "รอชำระเงิน" ||
+    status === "รอจัดเตรียม" ||
+    status === "กำลังแพ็ก" ||
+    status === "รอดำเนินการ"
+  ) {
     return "border-l-amber-500";
   }
 

@@ -64,7 +64,7 @@ export default async function ProductsPage({
     <div className="space-y-6">
       <PageHeader
         eyebrow="แค็ตตาล็อก"
-        title="จัดการสินค้า"
+        title="แก้ไขสินค้า"
         description="แก้ไขข้อมูลสินค้า ราคา รูปภาพ ตัวเลือก และสต็อกที่แสดงในหน้าร้าน"
         action={(
           <PermissionGate permission="products.manage">

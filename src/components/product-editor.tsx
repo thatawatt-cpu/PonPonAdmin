@@ -334,7 +334,7 @@ export function ProductEditor({
   return (
     <div>
       <StickyActionHeader
-        eyebrow="Product Editor"
+        eyebrow="แก้ไขสินค้า"
         title={groupName}
         description={`SKU Group ${groupSku} · ${variantProducts.length} ตัวเลือก · สต็อกรวม ${totalStock} ชิ้น`}
         feedback={saveError ? <span className="text-destructive">{saveError}</span> : undefined}
@@ -364,7 +364,7 @@ export function ProductEditor({
         <div className="space-y-5">
           <EditorCard
             title="ข้อมูลหน้าร้าน (PonPon)"
-            description="แก้เฉพาะข้อมูลที่ใช้แสดงบนเว็บ ส่วนชื่อสินค้าล็อกตาม ZORT"
+            description="แก้ไขเฉพาะข้อมูลที่ใช้แสดงบนเว็บ ส่วนชื่อสินค้าล็อกตาม ZORT"
           >
             <div className="grid gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">

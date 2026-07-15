@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 
 export type ManualRefundPayload = {
@@ -114,7 +115,7 @@ export function ManualRefundDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form className="space-y-4" onSubmit={handleSubmit} aria-busy={submitting}>
           <div className="space-y-2">
             <label htmlFor="manual-refund-reason" className="text-sm font-bold">
               เหตุผล
@@ -169,6 +170,15 @@ export function ManualRefundDialog({
             </Alert>
           )}
 
+          {submitting ? (
+            <Alert className="border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+              <Spinner />
+              <AlertDescription className="text-current">
+                กำลังบันทึกการคืนเงินและอัปเดตสถานะออเดอร์...
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
           <div className="grid gap-3 pt-2 sm:grid-cols-2">
             <Button
               type="button"
@@ -184,7 +194,7 @@ export function ManualRefundDialog({
               className="h-11 rounded-full"
               disabled={submitting}
             >
-              <Banknote />
+              {submitting ? <Spinner /> : <Banknote />}
               {submitting ? "กำลังยืนยัน..." : "ยืนยันคืนเงิน"}
             </Button>
           </div>

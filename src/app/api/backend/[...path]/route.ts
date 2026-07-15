@@ -30,10 +30,14 @@ export async function DELETE(request: NextRequest, context: Context) {
   return proxy(request, context);
 }
 
-async function proxy(request: NextRequest, context: Context) {
+export async function proxyBackendRequest(
+  request: NextRequest,
+  context: Context,
+  pathPrefix: string[] = [],
+) {
   const { path } = await context.params;
   const search = request.nextUrl.search;
-  const targetPath = `/api/${path.join("/")}${search}`;
+  const targetPath = `/api/${[...pathPrefix, ...path].join("/")}${search}`;
   let body = await getBody(request);
   const headers = new Headers();
   const contentType = request.headers.get("content-type");
@@ -133,6 +137,10 @@ async function proxy(request: NextRequest, context: Context) {
   }
 
   return response;
+}
+
+async function proxy(request: NextRequest, context: Context) {
+  return proxyBackendRequest(request, context);
 }
 
 async function refreshAccessToken(refreshToken: string) {

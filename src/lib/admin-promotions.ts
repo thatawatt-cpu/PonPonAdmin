@@ -82,8 +82,12 @@ export type PromotionUsage = {
   orderId: string;
   orderNumber: string;
   customerName: string;
+  customerPhone?: string | null;
+  orderTotal?: number | null;
+  promotionName?: string | null;
   discountAmount: number;
-  usedAtUtc: string;
+  usedAt?: string | null;
+  usedAtUtc?: string | null;
 };
 
 type PromotionApiResponse = Partial<Promotion> & {

@@ -23,6 +23,7 @@ type PricingSnapshotLine = {
 
 type PricingAdjustment = {
   type: string;
+  code: string;
   label: string;
   amount: number;
 };
@@ -103,8 +104,9 @@ function normalizePricingSnapshot(value: unknown): PricingSnapshot {
     adjustments: arrayValue(snapshot, "adjustments", "Adjustments").map((value) => {
       const adjustment = asRecord(value);
       return {
-        type: stringValue(adjustment, "type", "Type"),
-        label: stringValue(adjustment, "label", "Label") || "รายการปรับราคา",
+        type: stringValue(adjustment, "type", "Type").toLowerCase(),
+        code: stringValue(adjustment, "code", "Code"),
+        label: stringValue(adjustment, "label", "Label", "description", "Description"),
         amount: numberValue(adjustment, "amount", "Amount"),
       };
     }),
@@ -159,6 +161,22 @@ export function OrderPricingSnapshotDialog({
   const [snapshot, setSnapshot] = useState<PricingSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const appliedCouponDiscountTotal =
+    snapshot?.appliedCoupons?.reduce(
+      (total, coupon) =>
+        total + (coupon.discountAmount ?? 0) + (coupon.shippingDiscountAmount ?? 0),
+      0,
+    ) ?? 0;
+  const appliedCouponShippingDiscountTotal =
+    snapshot?.appliedCoupons?.reduce(
+      (total, coupon) => total + (coupon.shippingDiscountAmount ?? 0),
+      0,
+    ) ?? 0;
+  const visibleShippingDiscount = Math.max(
+    0,
+    (snapshot?.shippingDiscountAmount ?? 0) -
+      Math.max(appliedCouponShippingDiscountTotal, snapshot?.couponDiscountAmount ?? 0),
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -187,10 +205,10 @@ export function OrderPricingSnapshotDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Receipt className="size-4" />
-            Pricing Snapshot
+            รายละเอียดราคา
           </DialogTitle>
           <DialogDescription>
-            รายละเอียดการคำนวณราคาของออเดอร์ {orderNumber} ณ เวลาที่สั่งซื้อ
+            ออเดอร์ {orderNumber} ณ เวลาที่ลูกค้าสั่งซื้อ
           </DialogDescription>
         </DialogHeader>
 
@@ -249,7 +267,21 @@ export function OrderPricingSnapshotDialog({
 
             <div className="space-y-2 rounded-xl border p-4 text-sm">
               <SummaryRow label="ยอดสินค้ารวม" value={`฿${fmtMoney(snapshot.itemSubtotal)}`} />
-              {snapshot.couponDiscountAmount > 0 ? (
+              {snapshot.appliedCoupons?.map((coupon, index) => {
+                const couponDiscount =
+                  (coupon.discountAmount ?? 0) + (coupon.shippingDiscountAmount ?? 0);
+                if (couponDiscount <= 0) return null;
+
+                return (
+                  <SummaryRow
+                    key={`${coupon.code ?? coupon.name ?? "coupon"}-${index}`}
+                    label={`ส่วนลดคูปอง${coupon.code ? ` ${coupon.code}` : ""}`}
+                    value={`-฿${fmtMoney(couponDiscount)}`}
+                    valueClassName="text-green-600"
+                  />
+                );
+              })}
+              {appliedCouponDiscountTotal === 0 && snapshot.couponDiscountAmount > 0 ? (
                 <SummaryRow
                   label="ส่วนลดคูปอง"
                   value={`-฿${fmtMoney(snapshot.couponDiscountAmount)}`}
@@ -264,35 +296,22 @@ export function OrderPricingSnapshotDialog({
                 />
               ) : null}
               <SummaryRow label="ค่าจัดส่ง" value={`฿${fmtMoney(snapshot.shippingAmount)}`} />
-              {(snapshot.shippingDiscountAmount ?? 0) > 0 ? (
+              {visibleShippingDiscount > 0 ? (
                 <SummaryRow
                   label="ส่วนลดค่าจัดส่ง"
-                  value={`-฿${fmtMoney(snapshot.shippingDiscountAmount ?? 0)}`}
+                  value={`-฿${fmtMoney(visibleShippingDiscount)}`}
                   valueClassName="text-green-600"
                 />
               ) : null}
               {snapshot.vatAmount > 0 ? (
                 <SummaryRow label="ภาษีมูลค่าเพิ่ม" value={`฿${fmtMoney(snapshot.vatAmount)}`} />
               ) : null}
-              {snapshot.appliedCoupons?.length ? (
-                <div className="space-y-1 border-t pt-2">
-                  <p className="text-xs font-bold text-muted-foreground">คูปองที่ใช้จริง</p>
-                  {snapshot.appliedCoupons.map((coupon, index) => (
-                    <SummaryRow
-                      key={`${coupon.code ?? coupon.name ?? "coupon"}-${index}`}
-                      label={coupon.code ?? coupon.name ?? "Coupon"}
-                      value={`-฿${fmtMoney((coupon.discountAmount ?? 0) + (coupon.shippingDiscountAmount ?? 0))}`}
-                      valueClassName="text-green-600"
-                    />
-                  ))}
-                </div>
-              ) : null}
-              {snapshot.adjustments.map((adjustment, index) => (
+              {snapshot.adjustments.filter(shouldShowAdjustment).map((adjustment, index) => (
                 <SummaryRow
                   key={`${adjustment.type}-${index}`}
-                  label={adjustment.label}
-                  value={`${adjustment.amount < 0 ? "-" : ""}฿${fmtMoney(Math.abs(adjustment.amount))}`}
-                  valueClassName={adjustment.amount < 0 ? "text-green-600" : undefined}
+                  label={adjustmentLabel(adjustment)}
+                  value={`${isDiscountAdjustment(adjustment) ? "-" : ""}฿${fmtMoney(Math.abs(adjustment.amount))}`}
+                  valueClassName={isDiscountAdjustment(adjustment) ? "text-green-600" : undefined}
                 />
               ))}
               <div className="flex items-center justify-between border-t pt-2">
@@ -305,6 +324,39 @@ export function OrderPricingSnapshotDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function isDiscountAdjustment(adjustment: PricingAdjustment) {
+  return ["coupon", "promotion", "flash_sale"].includes(adjustment.type) || adjustment.amount < 0;
+}
+
+function adjustmentLabel(adjustment: PricingAdjustment) {
+  if (adjustment.type === "coupon") {
+    return `ส่วนลดคูปอง${adjustment.code ? ` ${adjustment.code}` : ""}`;
+  }
+
+  if (adjustment.type === "promotion") {
+    return `ส่วนลด Promotion${adjustment.label ? ` ${cleanAdjustmentName(adjustment.label, "Promotion")}` : ""}`;
+  }
+
+  if (adjustment.type === "flash_sale") {
+    return `ส่วนลด Flash Sale${adjustment.label ? ` ${cleanAdjustmentName(adjustment.label, "Flash Sale")}` : ""}`;
+  }
+
+  return adjustment.label || "รายการปรับราคาอื่น";
+}
+
+function shouldShowAdjustment(adjustment: PricingAdjustment) {
+  if (adjustment.amount === 0) return false;
+
+  // These discount types are already represented by line prices, coupon rows, or promotion summary.
+  if (["coupon", "promotion", "flash_sale"].includes(adjustment.type)) return false;
+
+  return Boolean(adjustment.label);
+}
+
+function cleanAdjustmentName(label: string, prefix: string) {
+  return label.replace(new RegExp(`^${prefix}\\s*`, "i"), "").trim();
 }
 
 function SummaryRow({

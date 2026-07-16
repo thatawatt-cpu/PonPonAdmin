@@ -74,8 +74,13 @@ export type CouponUsage = {
   orderId: string;
   orderNumber: string;
   customerName: string;
+  customerPhone?: string | null;
+  orderTotal?: number | null;
+  couponCode?: string | null;
+  couponName?: string | null;
   discountAmount: number;
-  usedAtUtc: string;
+  usedAt?: string | null;
+  usedAtUtc?: string | null;
 };
 
 export type CouponAuditLog = {

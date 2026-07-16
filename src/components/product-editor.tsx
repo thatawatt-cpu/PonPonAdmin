@@ -107,7 +107,6 @@ export function ProductEditor({
   const [highlights, setHighlights] = useState(product.highlights ?? description);
   const [isFeatured, setIsFeatured] = useState(product.isFeatured);
   const [isBestSeller, setIsBestSeller] = useState(product.isBestSeller);
-  const [isOnHomepage, setIsOnHomepage] = useState(product.isOnHomepage);
   const [optionNames, setOptionNames] = useState<string[]>(() => {
     const names = new Set<string>();
     for (const v of variantProducts) {
@@ -290,7 +289,9 @@ export function ProductEditor({
             promotionBadge,
             highlights,
             richDescription: resolvedContentHtml,
-            isFeatured, isBestSeller, isOnHomepage,
+            isFeatured,
+            isBestSeller,
+            isOnHomepage: product.isOnHomepage,
             // ถ้า variant ตัวนี้คือ product หลัก (id เดียวกัน) ให้รวม options ในนี้
             // เพื่อป้องกัน 2 PUT ไปที่ endpoint เดียวกันพร้อมกัน แล้ว options โดน overwrite เป็น null
             ...(variants.some(v => v.id === id) ? {
@@ -565,7 +566,6 @@ export function ProductEditor({
                     ["เปิดขายสินค้า", active, toggleVisibility],
                     ["สินค้าแนะนำ", isFeatured, () => setIsFeatured(v => !v)],
                     ["สินค้าขายดี", isBestSeller, () => setIsBestSeller(v => !v)],
-                    ["แสดงบนหน้าแรก", isOnHomepage, () => setIsOnHomepage(v => !v)],
                   ] as [string, boolean, () => void][]
                 ).map(([label, enabled, onClick]) => (
                   <div

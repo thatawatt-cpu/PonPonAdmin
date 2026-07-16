@@ -10,8 +10,8 @@ import {
   PackageCheck,
   PackageOpen,
   ShoppingCart,
-  Truck,
 } from "lucide-react";
+import { DashboardShippingCard } from "@/components/dashboard-shipping-card";
 import { DashboardSalesCard } from "@/components/dashboard-sales-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +36,6 @@ import {
   getAdminDashboard,
   type DashboardOrder,
   type DashboardPeriod,
-  type DashboardShippingItem,
 } from "@/lib/admin-dashboard";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +71,11 @@ export default async function DashboardPage({
   }
 
   const dashboardUpdatedAt = formatDate(new Date().toISOString());
+  const initialShipping =
+    selectedSalesPeriod === "day"
+      ? dashboard.shipping
+      : ((await getAdminDashboard("day")).dashboard?.shipping ??
+        dashboard.shipping);
 
   const urgentTasks = [
     {
@@ -294,10 +298,7 @@ export default async function DashboardPage({
         </div>
 
         <div className="space-y-5">
-          <ShippingStatusCard
-            period={selectedSalesPeriod}
-            shipping={dashboard.shipping}
-          />
+          <DashboardShippingCard initialShipping={initialShipping} />
 
           <Card className="bg-emerald-50/35 shadow-none ring-emerald-200 dark:bg-emerald-950/10 dark:ring-emerald-900/70">
             <CardHeader>
@@ -567,212 +568,6 @@ function PaymentSummary({
       <span className={cn("text-2xl font-black", colors.value)}>{value}</span>
     </div>
   );
-}
-
-const shippingRangeOptions: Array<{
-  label: string;
-  value: DashboardPeriod;
-}> = [
-  { label: "วันนี้", value: "day" },
-  { label: "อาทิตย์นี้", value: "week" },
-  { label: "เดือนนี้", value: "month" },
-];
-
-function ShippingStatusCard({
-  period,
-  shipping,
-}: {
-  period: DashboardPeriod;
-  shipping: {
-    inTransit: number;
-    delivered: number;
-    returned: number;
-    total: number;
-    latest: DashboardShippingItem[];
-  };
-}) {
-  const periodLabel =
-    shippingRangeOptions.find((option) => option.value === period)?.label ??
-    (period === "year" ? "ปีนี้" : "วันนี้");
-  const latest = shipping.latest.slice(0, 3);
-
-  return (
-    <Card className="bg-sky-50/35 shadow-none ring-sky-200 dark:bg-sky-950/10 dark:ring-sky-900/70">
-      <CardHeader className="gap-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-lg font-bold">
-              <span className="grid size-8 place-items-center rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300">
-                <Truck className="size-4" />
-              </span>
-              สถานะการจัดส่ง
-            </CardTitle>
-            <CardDescription>{periodLabel}</CardDescription>
-          </div>
-          <span className="rounded-lg bg-sky-100 px-3 py-2 text-right text-sm font-black text-sky-800 dark:bg-sky-950/60 dark:text-sky-300">
-            {shipping.total.toLocaleString("th-TH")} รายการ
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-1">
-          {shippingRangeOptions.map((option) => (
-            <Link
-              key={option.value}
-              href={dashboardPeriodHref(option.value)}
-              className={cn(
-                "inline-flex min-h-9 items-center rounded-md px-3 text-sm font-semibold transition-colors",
-                period === option.value
-                  ? "bg-sky-600 text-white hover:bg-sky-600"
-                  : "bg-background/80 text-muted-foreground ring-1 ring-border hover:text-foreground",
-              )}
-              aria-current={period === option.value ? "page" : undefined}
-            >
-              {option.label}
-            </Link>
-          ))}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3">
-          <ShippingMetric
-            count={shipping.inTransit}
-            label="กำลังจัดส่ง"
-            tone="sky"
-          />
-          <ShippingMetric
-            count={shipping.delivered}
-            label="ส่งสำเร็จแล้ว"
-            tone="emerald"
-          />
-          <ShippingMetric
-            count={shipping.returned}
-            label="สินค้าตีกลับ"
-            tone="rose"
-          />
-        </div>
-        <div className="border-t pt-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-bold">ล่าสุด</p>
-            <Link href="/orders" className="text-sm font-semibold text-muted-foreground hover:text-foreground">
-              ดูออเดอร์
-            </Link>
-          </div>
-          {latest.length ? (
-            <div className="mt-3 space-y-2">
-              {latest.map((item, index) => (
-                <ShippingLatestCard key={item.id || `${item.orderNumber}-${index}`} item={item} />
-              ))}
-            </div>
-          ) : (
-            <p className="mt-3 rounded-lg bg-background/70 px-4 py-5 text-center text-sm text-muted-foreground">
-              ยังไม่มีข้อมูลจัดส่งล่าสุด
-            </p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ShippingMetric({
-  count,
-  label,
-  tone,
-}: {
-  count: number;
-  label: string;
-  tone: "amber" | "emerald" | "rose" | "sky";
-}) {
-  const colors = shippingToneClasses(tone);
-
-  return (
-    <div className={cn("flex items-center justify-between gap-4 rounded-lg px-4 py-3", colors.row)}>
-      <p className="text-sm font-semibold">{label}</p>
-      <span className={cn("rounded-full px-3 py-1 text-sm font-black", colors.badge)}>
-        {count.toLocaleString("th-TH")} รายการ
-      </span>
-    </div>
-  );
-}
-
-function ShippingLatestCard({ item }: { item: DashboardShippingItem }) {
-  const colors = shippingStatusTone(item.status);
-
-  return (
-    <div className="rounded-lg bg-background/75 px-4 py-3 ring-1 ring-border/70">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-black">
-            {item.orderNumber ? `#${item.orderNumber}` : item.trackingNo || "ไม่ระบุเลขออเดอร์"}
-          </p>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {[item.customerName, item.carrier, item.trackingNo].filter(Boolean).join(" · ") || "ไม่มีรายละเอียดเพิ่มเติม"}
-          </p>
-        </div>
-        <Badge variant="secondary" className={colors}>
-          {item.statusLabel}
-        </Badge>
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        อัปเดต {formatDate(item.updatedAt)}
-      </p>
-    </div>
-  );
-}
-
-function dashboardPeriodHref(period: DashboardPeriod) {
-  const params = new URLSearchParams();
-
-  if (period !== "day") {
-    params.set("period", period);
-  }
-
-  const query = params.toString();
-  return query ? `/?${query}` : "/";
-}
-
-function shippingToneClasses(tone: "amber" | "emerald" | "rose" | "sky") {
-  const colors = {
-    amber: {
-      badge: "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
-      row: "bg-amber-50/70 dark:bg-amber-950/15",
-    },
-    emerald: {
-      badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
-      row: "bg-emerald-50/70 dark:bg-emerald-950/15",
-    },
-    rose: {
-      badge: "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300",
-      row: "bg-rose-50/70 dark:bg-rose-950/15",
-    },
-    sky: {
-      badge: "bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
-      row: "bg-sky-50/70 dark:bg-sky-950/15",
-    },
-  };
-
-  return colors[tone];
-}
-
-function shippingStatusTone(status: string) {
-  const normalized = status.trim().toLowerCase();
-
-  if (normalized === "picked_up") {
-    return "bg-sky-100 text-sky-700 hover:bg-sky-100 dark:bg-sky-950/50 dark:text-sky-300";
-  }
-
-  if (normalized === "in_transit") {
-    return "bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-300";
-  }
-
-  if (normalized === "delivered") {
-    return "bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300";
-  }
-
-  if (normalized === "returned") {
-    return "bg-rose-100 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/50 dark:text-rose-300";
-  }
-
-  return "bg-muted text-muted-foreground hover:bg-muted";
 }
 
 function summaryToneClasses(

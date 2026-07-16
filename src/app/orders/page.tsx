@@ -319,12 +319,13 @@ function OrdersPageContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeFilter = getActiveFilter(searchParams);
+  const urlKeyword = searchParams.get("keyword") ?? "";
+  const urlPage = parsePage(searchParams.get("page"));
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
-  const [inputValue, setInputValue] = useState(searchParams.get("keyword") ?? "");
-  const [page, setPage] = useState(() => parsePage(searchParams.get("page")));
+  const [keyword, setKeyword] = useState(urlKeyword);
+  const [inputValue, setInputValue] = useState(urlKeyword);
   const [hasMore, setHasMore] = useState(false);
   const [pendingFilterKey, setPendingFilterKey] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -341,8 +342,8 @@ function OrdersPageContent() {
       ? order.lastSyncedAt
       : latest;
   }, null);
-  const rangeStart = orders.length ? (page - 1) * PAGE_SIZE + 1 : 0;
-  const rangeEnd = (page - 1) * PAGE_SIZE + orders.length;
+  const rangeStart = orders.length ? (urlPage - 1) * PAGE_SIZE + 1 : 0;
+  const rangeEnd = (urlPage - 1) * PAGE_SIZE + orders.length;
   const allVisibleSelected =
     orders.length > 0 && orders.every((order) => selectedIds.includes(order.id));
 
@@ -370,12 +371,22 @@ function OrdersPageContent() {
   useEffect(() => {
     let active = true;
 
-    void getOrders(keyword, activeFilter, page)
+    void Promise.resolve()
+      .then(() => {
+        if (active) {
+          setLoading(true);
+          setLoadError(false);
+        }
+
+        return getOrders(urlKeyword, activeFilter, urlPage);
+      })
       .then((data) => {
         if (!active) return;
         setOrders(data.items);
-        setHasMore(pageHasMore(data, page));
+        setHasMore(pageHasMore(data, urlPage));
         setLoadError(false);
+        setKeyword(urlKeyword);
+        setInputValue(urlKeyword);
         setSelectedIds([]);
       })
       .catch(() => {
@@ -394,7 +405,25 @@ function OrdersPageContent() {
     return () => {
       active = false;
     };
-  }, [keyword, activeFilter, page]);
+  }, [urlKeyword, activeFilter, urlPage]);
+
+  function pushOrdersQuery(
+    params: URLSearchParams,
+    fallbackKeyword: string,
+    fallbackFilter: OrderFilter,
+    fallbackPage: number,
+  ) {
+    const nextQuery = params.toString();
+    const currentQuery = searchParams.toString();
+    const nextHref = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+
+    if (nextQuery === currentQuery) {
+      void fetchOrders(fallbackKeyword, fallbackFilter, fallbackPage);
+      return;
+    }
+
+    router.push(nextHref);
+  }
 
   function handleSearch() {
     const nextKeyword = inputValue.trim();
@@ -404,14 +433,13 @@ function OrdersPageContent() {
     params.delete("page");
     setLoading(true);
     setKeyword(nextKeyword);
-    setPage(1);
-    router.push(params.size ? `${pathname}?${params}` : pathname);
+    pushOrdersQuery(params, nextKeyword, activeFilter, 1);
   }
 
   function handleFilter(filter: OrderFilter) {
-    if (activeFilter.key === filter.key && page === 1) {
+    if (activeFilter.key === filter.key && urlPage === 1) {
       setPendingFilterKey(filter.key);
-      void fetchOrders(keyword, filter, 1);
+      void fetchOrders(urlKeyword, filter, 1);
       return;
     }
 
@@ -427,8 +455,7 @@ function OrdersPageContent() {
 
     setLoading(true);
     setPendingFilterKey(filter.key);
-    setPage(1);
-    router.push(params.size ? `${pathname}?${params}` : pathname);
+    pushOrdersQuery(params, urlKeyword, filter, 1);
   }
 
   function handlePageChange(nextPage: number) {
@@ -436,8 +463,7 @@ function OrdersPageContent() {
     if (nextPage > 1) params.set("page", String(nextPage));
     else params.delete("page");
     setLoading(true);
-    setPage(nextPage);
-    router.push(params.size ? `${pathname}?${params}` : pathname);
+    pushOrdersQuery(params, urlKeyword, activeFilter, nextPage);
   }
 
   function clearFilters() {
@@ -445,9 +471,8 @@ function OrdersPageContent() {
     setPendingFilterKey("all");
     setInputValue("");
     setKeyword("");
-    setPage(1);
     setSelectedIds([]);
-    router.push(pathname);
+    pushOrdersQuery(new URLSearchParams(), "", ORDER_STATUS_TABS[0], 1);
   }
 
   function clearKeyword() {
@@ -457,8 +482,7 @@ function OrdersPageContent() {
     setLoading(true);
     setInputValue("");
     setKeyword("");
-    setPage(1);
-    router.push(params.size ? `${pathname}?${params}` : pathname);
+    pushOrdersQuery(params, "", activeFilter, 1);
   }
 
   function toggleOrder(orderId: string) {
@@ -489,7 +513,7 @@ function OrdersPageContent() {
         text: `ซิงก์สำเร็จ: ดึงมา ${data.totalFetched} รายการ — สร้าง ${data.created} อัปเดต ${data.updated}${data.failed > 0 ? ` ล้มเหลว ${data.failed}` : ""}`,
         ok: true,
       });
-      fetchOrders(keyword, activeFilter, page);
+      fetchOrders(urlKeyword, activeFilter, urlPage);
     } catch {
       setSyncMessage({ text: "ซิงก์ล้มเหลว กรุณาลองใหม่", ok: false });
     } finally {
@@ -508,7 +532,7 @@ function OrdersPageContent() {
         body: JSON.stringify({ reason }),
       });
       if (!res.ok) throw new Error("cancel failed");
-      await fetchOrders(keyword, activeFilter, page);
+      await fetchOrders(urlKeyword, activeFilter, urlPage);
       setActionMessage({ text: `ยกเลิกออเดอร์ ${cancelTarget.number} แล้ว`, ok: true });
       setCancelTarget(null);
     } catch (error) {
@@ -681,7 +705,7 @@ function OrdersPageContent() {
         ) : null}
 
         {loadError ? (
-          <OrdersLoadError onRetry={() => fetchOrders(keyword, activeFilter, page)} />
+          <OrdersLoadError onRetry={() => fetchOrders(urlKeyword, activeFilter, urlPage)} />
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
@@ -717,18 +741,18 @@ function OrdersPageContent() {
           </>
         )}
 
-        {!loading && (orders.length > 0 || page > 1) && (
+        {!loading && (orders.length > 0 || urlPage > 1) && (
           <div className="flex flex-col gap-3 border-t border-border px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-sm text-muted-foreground">
-              แสดง {rangeStart.toLocaleString("th-TH")}–{rangeEnd.toLocaleString("th-TH")} · หน้า {page.toLocaleString("th-TH")}
+              แสดง {rangeStart.toLocaleString("th-TH")}–{rangeEnd.toLocaleString("th-TH")} · หน้า {urlPage.toLocaleString("th-TH")}
             </span>
             <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="lg"
                 className="flex-1 sm:flex-none"
-                disabled={page === 1}
-                onClick={() => handlePageChange(page - 1)}
+                disabled={urlPage === 1}
+                onClick={() => handlePageChange(urlPage - 1)}
               >
                 ก่อนหน้า
               </Button>
@@ -737,7 +761,7 @@ function OrdersPageContent() {
                 size="lg"
                 className="flex-1 sm:flex-none"
                 disabled={!hasMore}
-                onClick={() => handlePageChange(page + 1)}
+                onClick={() => handlePageChange(urlPage + 1)}
               >
                 ถัดไป
               </Button>

@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/table";
 import {
   getAdminDashboard,
+  getAdminDashboardShipping,
   type DashboardOrder,
   type DashboardPeriod,
 } from "@/lib/admin-dashboard";
@@ -71,11 +72,11 @@ export default async function DashboardPage({
   }
 
   const dashboardUpdatedAt = formatDate(new Date().toISOString());
+  const initialShippingPeriod = parseShippingPeriod(selectedSalesPeriod);
   const initialShipping =
-    selectedSalesPeriod === "day"
+    selectedSalesPeriod === initialShippingPeriod
       ? dashboard.shipping
-      : ((await getAdminDashboard("day")).dashboard?.shipping ??
-        dashboard.shipping);
+      : ((await getAdminDashboardShipping(initialShippingPeriod)).shipping ?? dashboard.shipping);
 
   const urgentTasks = [
     {
@@ -298,7 +299,10 @@ export default async function DashboardPage({
         </div>
 
         <div className="space-y-5">
-          <DashboardShippingCard initialShipping={initialShipping} />
+          <DashboardShippingCard
+            initialPeriod={initialShippingPeriod}
+            initialShipping={initialShipping}
+          />
 
           <Card className="bg-emerald-50/35 shadow-none ring-emerald-200 dark:bg-emerald-950/10 dark:ring-emerald-900/70">
             <CardHeader>
@@ -681,6 +685,12 @@ function parseSalesPeriod(
   }
 
   return "day";
+}
+
+function parseShippingPeriod(
+  period: DashboardPeriod,
+): Exclude<DashboardPeriod, "year"> {
+  return period === "week" || period === "month" ? period : "day";
 }
 
 function formatMoney(value: number) {

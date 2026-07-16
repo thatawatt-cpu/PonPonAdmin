@@ -118,6 +118,12 @@ type DashboardResult = {
   syncRuns: DashboardSyncRun[];
 };
 
+type DashboardShippingResult = {
+  authRequired: boolean;
+  error?: string;
+  shipping: DashboardData["shipping"] | null;
+};
+
 function dashboardPath(period: DashboardPeriod) {
   const params = new URLSearchParams({
     date: bangkokDate(),
@@ -127,6 +133,16 @@ function dashboardPath(period: DashboardPeriod) {
   });
 
   return `/api/admin/dashboard?${params.toString()}`;
+}
+
+function dashboardShippingPath(period: Exclude<DashboardPeriod, "year">) {
+  const params = new URLSearchParams({
+    date: bangkokDate(),
+    period,
+    timeZone: "Asia/Bangkok",
+  });
+
+  return `/api/admin/dashboard/shipping?${params.toString()}`;
 }
 
 function bangkokDate() {
@@ -186,6 +202,38 @@ export async function getAdminDashboard(
       dashboard: null,
       error: error instanceof Error ? error.message : "Cannot load dashboard",
       syncRuns: [],
+    };
+  }
+}
+
+export async function getAdminDashboardShipping(
+  period: Exclude<DashboardPeriod, "year">,
+): Promise<DashboardShippingResult> {
+  const token = await getAccessToken();
+  const headers = token ? { authorization: `Bearer ${token}` } : undefined;
+
+  try {
+    const response = await ponponApiJson<unknown>(dashboardShippingPath(period), {
+      headers,
+    });
+
+    return {
+      authRequired: false,
+      shipping: normalizeShippingSummary(response),
+    };
+  } catch (error) {
+    if (error instanceof PonPonApiError && error.status === 401) {
+      return {
+        authRequired: true,
+        error: error.message,
+        shipping: null,
+      };
+    }
+
+    return {
+      authRequired: false,
+      error: error instanceof Error ? error.message : "Cannot load shipping dashboard",
+      shipping: null,
     };
   }
 }

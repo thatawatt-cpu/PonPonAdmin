@@ -32,12 +32,17 @@ const shippingRangeOptions: Array<{
 ];
 
 export function DashboardShippingCard({
+  initialPeriod = "day",
   initialShipping,
 }: {
+  initialPeriod?: ShippingPeriod;
   initialShipping: ShippingData;
 }) {
-  const [period, setPeriod] = useState<ShippingPeriod>("day");
+  const [period, setPeriod] = useState<ShippingPeriod>(initialPeriod);
   const [shipping, setShipping] = useState(initialShipping);
+  const [shippingCache, setShippingCache] = useState<
+    Partial<Record<ShippingPeriod, ShippingData>>
+  >({ [initialPeriod]: initialShipping });
   const [loadingPeriod, setLoadingPeriod] = useState<ShippingPeriod | null>(
     null,
   );
@@ -51,10 +56,22 @@ export function DashboardShippingCard({
     if (nextPeriod === period || loadingPeriod) return;
 
     setError("");
+
+    const cachedShipping = shippingCache[nextPeriod];
+    if (cachedShipping) {
+      setShipping(cachedShipping);
+      setPeriod(nextPeriod);
+      return;
+    }
+
     setLoadingPeriod(nextPeriod);
 
     try {
       const nextShipping = await fetchShippingPeriod(nextPeriod);
+      setShippingCache((current) => ({
+        ...current,
+        [nextPeriod]: nextShipping,
+      }));
       setShipping(nextShipping);
       setPeriod(nextPeriod);
     } catch {
@@ -162,11 +179,10 @@ export function DashboardShippingCard({
 async function fetchShippingPeriod(period: ShippingPeriod) {
   const params = new URLSearchParams({
     date: bangkokDate(),
-    lowStockThreshold: "5",
     period,
     timeZone: "Asia/Bangkok",
   });
-  const response = await fetch(`/api/backend/admin/dashboard?${params}`, {
+  const response = await fetch(`/api/backend/admin/dashboard/shipping?${params}`, {
     credentials: "same-origin",
   });
 
@@ -174,8 +190,7 @@ async function fetchShippingPeriod(period: ShippingPeriod) {
     throw new Error(`Cannot load dashboard shipping for ${period}`);
   }
 
-  const dashboard = (await response.json()) as Partial<DashboardData>;
-  return normalizeShippingSummary(dashboard.shipping);
+  return normalizeShippingSummary(await response.json());
 }
 
 function bangkokDate() {

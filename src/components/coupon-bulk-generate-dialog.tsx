@@ -23,6 +23,8 @@ import type {
 import type { AdminCategory } from "@/lib/admin-products";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { CouponCustomerPicker } from "@/components/coupon-customer-picker";
+import { CouponScopeValuePicker } from "@/components/coupon-scope-value-picker";
 import {
   Dialog,
   DialogContent,
@@ -670,7 +672,8 @@ function ScopeEditor({
                   ))}
                 </NativeSelect>
               ) : (
-                <Input
+                <CouponScopeValuePicker
+                  kind={draft.kind}
                   value={draft.value}
                   onValueChange={(nextValue) =>
                     onDraftsChange(
@@ -679,7 +682,6 @@ function ScopeEditor({
                       ),
                     )
                   }
-                  placeholder={scopeOptions.find((option) => option.value === draft.kind)?.placeholder}
                 />
               )}
               <Button
@@ -757,7 +759,7 @@ function CustomerScopeEditor({
                 ))}
               </NativeSelect>
               {draft.kind === "customer" ? (
-                <Input
+                <CouponCustomerPicker
                   value={draft.customerId}
                   onValueChange={(customerId) =>
                     onDraftsChange(

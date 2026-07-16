@@ -9,7 +9,6 @@ import {
   CalendarDays,
   CheckCircle2,
   CircleDollarSign,
-  CreditCard,
   Plus,
   Power,
   RefreshCw,
@@ -30,6 +29,8 @@ import type {
 import type { CouponCampaign } from "@/lib/admin-coupon-campaigns";
 import type { AdminCategory } from "@/lib/admin-products";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { CouponCustomerPicker } from "@/components/coupon-customer-picker";
+import { CouponScopeValuePicker } from "@/components/coupon-scope-value-picker";
 import {
   Card,
   CardContent,
@@ -106,18 +107,6 @@ type CustomerScopeDraft = {
   id: string;
   kind: CustomerScopeDraftKind;
   customerId: string;
-};
-
-const CONDITION_KIND_OPTIONS = [
-  { value: "sales_channel", label: "ช่องทางขาย", placeholder: "เช่น online, line, pos" },
-  { value: "shipping_channel", label: "ช่องทางจัดส่ง", placeholder: "เช่น flash, kerry, ems" },
-] as const;
-
-type ConditionDraftKind = (typeof CONDITION_KIND_OPTIONS)[number]["value"];
-type ConditionDraft = {
-  id: string;
-  kind: ConditionDraftKind;
-  value: string;
 };
 
 function toInputValue(value: number | null) {
@@ -232,42 +221,6 @@ function buildCustomerScopes(
   }, []);
 }
 
-function conditionsToDrafts(conditions: CouponCondition[] = []): ConditionDraft[] {
-  return conditions
-    .filter(isEditableCondition)
-    .map((condition, index) => ({
-      id: `condition-${index}`,
-      kind: condition.type,
-      value: condition.value,
-    }));
-}
-
-function createConditionDraft(kind: ConditionDraftKind = "sales_channel"): ConditionDraft {
-  return {
-    id: `condition-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    kind,
-    value: "",
-  };
-}
-
-function buildConditions(conditionDrafts: ConditionDraft[]) {
-  return conditionDrafts.reduce<CouponCondition[]>((conditions, draft) => {
-    const value = draft.value.trim();
-    if (value) conditions.push({ type: draft.kind, value });
-    return conditions;
-  }, []);
-}
-
-function isEditableCondition(
-  condition: CouponCondition,
-): condition is CouponCondition & { type: ConditionDraftKind } {
-  return isEditableConditionKind(condition.type);
-}
-
-function isEditableConditionKind(kind: CouponCondition["type"]): kind is ConditionDraftKind {
-  return kind === "sales_channel" || kind === "shipping_channel";
-}
-
 function todayInputValue() {
   return toDateInputValue(new Date());
 }
@@ -360,9 +313,6 @@ export function CouponEditor({
       ? initialCustomerScopeDrafts
       : [{ id: "customer-scope-0", kind: "existing_customer", customerId: "" }],
   );
-  const [conditionDrafts, setConditionDrafts] = useState<ConditionDraft[]>(
-    conditionsToDrafts(initialData?.conditions),
-  );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -388,9 +338,6 @@ export function CouponEditor({
         (customerScopeDraft) =>
           customerScopeDraft.kind === "customer" && !customerScopeDraft.customerId.trim(),
       );
-    const hasEmptyConditionValue = conditionDrafts.some(
-      (conditionDraft) => !conditionDraft.value.trim(),
-    );
 
     const codeMessage = !trimmedCode
       ? "กรอกโค้ดคูปอง เช่น WELCOME10"
@@ -441,10 +388,6 @@ export function CouponEditor({
         : hasEmptyCustomerId
           ? "กรอกรหัสลูกค้าให้ครบก่อนบันทึก"
           : "";
-    const conditionMessage = hasEmptyConditionValue
-      ? "กรอกเงื่อนไขการใช้งานให้ครบทุกแถวก่อนบันทึก"
-      : "";
-
     return {
       codeMessage,
       codeStatus: (
@@ -459,7 +402,6 @@ export function CouponEditor({
       usageMessage,
       scopeMessage,
       customerScopeMessage,
-      conditionMessage,
       isValid:
         !!trimmedCode &&
         COUPON_CODE_PATTERN.test(trimmedCode) &&
@@ -475,12 +417,10 @@ export function CouponEditor({
         (!endDate || endDate >= startDate) &&
         !usageMessage &&
         !scopeMessage &&
-        !customerScopeMessage &&
-        !conditionMessage,
+        !customerScopeMessage,
     };
   }, [
     code,
-    conditionDrafts,
     couponScopes.length,
     couponCustomerScopes.length,
     customerScopeDrafts,
@@ -591,20 +531,6 @@ export function CouponEditor({
     });
   }
 
-  function updateConditionDraft(id: string, patch: Partial<Omit<ConditionDraft, "id">>) {
-    setConditionDrafts((currentDrafts) =>
-      currentDrafts.map((conditionDraft) =>
-        conditionDraft.id === id ? { ...conditionDraft, ...patch } : conditionDraft,
-      ),
-    );
-  }
-
-  function removeConditionDraft(id: string) {
-    setConditionDrafts((currentDrafts) =>
-      currentDrafts.filter((conditionDraft) => conditionDraft.id !== id),
-    );
-  }
-
   async function save() {
     const trimmedCode = code.trim();
     const trimmedName = name.trim();
@@ -612,7 +538,6 @@ export function CouponEditor({
     const parsedDiscountValue = Number(discountValue);
     const scopes = buildScopes(scopeMode, scopeDrafts);
     const customerScopes = buildCustomerScopes(customerScopeMode, customerScopeDrafts);
-    const conditions = buildConditions(conditionDrafts);
 
     if (!validation.isValid) {
       setError("กรุณากรอกข้อมูลที่จำเป็นให้ถูกต้องก่อนบันทึก");
@@ -646,7 +571,7 @@ export function CouponEditor({
         isActive,
         scopes,
         customerScopes,
-        conditions,
+        conditions: [],
       };
 
       if (isEdit) {
@@ -712,6 +637,13 @@ export function CouponEditor({
           </>
         }
       />
+
+      {error ? (
+        <p className="flex items-center gap-2 px-1 text-sm font-bold text-destructive">
+          <AlertCircle className="size-4 shrink-0" />
+          {error}
+        </p>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-12">
         <main className="space-y-4 xl:col-span-8">
@@ -985,10 +917,6 @@ export function CouponEditor({
 
                   <div className="space-y-2">
                     {scopeDrafts.map((scopeDraft) => {
-                      const selectedOption =
-                        SCOPE_KIND_OPTIONS.find((option) => option.value === scopeDraft.kind) ??
-                        SCOPE_KIND_OPTIONS[0];
-
                       return (
                         <div
                           key={scopeDraft.id}
@@ -1029,11 +957,10 @@ export function CouponEditor({
                               ))}
                             </NativeSelect>
                           ) : (
-                            <Input
+                            <CouponScopeValuePicker
+                              kind={scopeDraft.kind}
                               value={scopeDraft.value}
                               onValueChange={(value) => updateScopeDraft(scopeDraft.id, { value })}
-                              placeholder={selectedOption.placeholder}
-                              className="h-11 rounded-xl"
                             />
                           )}
                           <Button
@@ -1149,7 +1076,7 @@ export function CouponEditor({
                             ))}
                           </NativeSelect>
                           {customerScopeDraft.kind === "customer" ? (
-                            <Input
+                            <CouponCustomerPicker
                               value={customerScopeDraft.customerId}
                               onValueChange={(customerId) =>
                                 updateCustomerScopeDraft(customerScopeDraft.id, { customerId })
@@ -1201,109 +1128,6 @@ export function CouponEditor({
 
           <SectionCard
             number="7"
-            title="เงื่อนไขการใช้งาน"
-            description="จำกัดคูปองตามช่องทางขายหรือช่องทางจัดส่ง"
-            icon={<CreditCard />}
-          >
-            <div className="space-y-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-bold text-foreground">Coupon Conditions</p>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    ถ้าไม่เพิ่มเงื่อนไข คูปองจะใช้ได้กับทุกช่องทาง
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setConditionDrafts((currentDrafts) => [
-                      ...currentDrafts,
-                      createConditionDraft(),
-                    ])
-                  }
-                >
-                  <Plus />
-                  เพิ่มเงื่อนไข
-                </Button>
-              </div>
-
-              {conditionDrafts.length > 0 ? (
-                <div className="space-y-2 rounded-2xl border border-border bg-muted/25 p-4">
-                  {conditionDrafts.map((conditionDraft) => {
-                    const selectedOption =
-                      CONDITION_KIND_OPTIONS.find(
-                        (option) => option.value === conditionDraft.kind,
-                      ) ?? CONDITION_KIND_OPTIONS[0];
-
-                    return (
-                      <div
-                        key={conditionDraft.id}
-                        className="grid gap-2 rounded-xl border border-border bg-background p-3 md:grid-cols-[200px_minmax(0,1fr)_auto]"
-                      >
-                        <NativeSelect
-                          value={conditionDraft.kind}
-                          onChange={(event) =>
-                            updateConditionDraft(conditionDraft.id, {
-                              kind: event.target.value as ConditionDraftKind,
-                              value: "",
-                            })
-                          }
-                          className="h-11 w-full [&_select]:h-11 [&_select]:rounded-xl"
-                        >
-                          {CONDITION_KIND_OPTIONS.map((option) => (
-                            <NativeSelectOption key={option.value} value={option.value}>
-                              {option.label}
-                            </NativeSelectOption>
-                          ))}
-                        </NativeSelect>
-
-                        <Input
-                          value={conditionDraft.value}
-                          onValueChange={(value) =>
-                            updateConditionDraft(conditionDraft.id, { value })
-                          }
-                          placeholder={selectedOption.placeholder}
-                          className="h-11 rounded-xl"
-                        />
-
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-11 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeConditionDraft(conditionDraft.id)}
-                          aria-label="ลบเงื่อนไข"
-                        >
-                          <Trash2 />
-                        </Button>
-                      </div>
-                    );
-                  })}
-
-                  {validation.conditionMessage ? (
-                    <p className="flex items-center gap-1.5 text-xs font-medium text-destructive">
-                      <AlertCircle className="size-3.5" />
-                      {validation.conditionMessage}
-                    </p>
-                  ) : null}
-
-                  <div className="grid gap-2 text-xs leading-5 text-muted-foreground sm:grid-cols-2">
-                    <p>ระบุช่องทางขาย เช่น online, line หรือ pos</p>
-                    <p>ถ้าเงื่อนไขคนละประเภท ระบบจะตรวจพร้อมกัน เช่น sales channel และ shipping channel</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-border bg-muted/25 p-4 text-sm leading-6 text-muted-foreground">
-                  คูปองนี้ยังไม่มีเงื่อนไขเพิ่มเติม ใช้ได้กับทุกช่องทางขายและจัดส่ง
-                </div>
-              )}
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            number="8"
             title="ตัวเลือกเพิ่มเติม"
             description="ควบคุมการใช้ร่วมกับโปรโมชันอื่นและสถานะการเปิดใช้งาน"
             icon={<Settings2 />}
@@ -1382,53 +1206,6 @@ export function CouponEditor({
         </aside>
       </div>
 
-      <Card className="rounded-2xl border-border/80 bg-card shadow-sm">
-        <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            {error ? (
-              <div className="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm font-bold text-destructive">
-                <AlertCircle className="mt-0.5 size-4 shrink-0" />
-                <span>{error}</span>
-              </div>
-            ) : !validation.isValid ? (
-              <div className="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm font-bold text-destructive">
-                <AlertCircle className="mt-0.5 size-4 shrink-0" />
-                <span>กรุณากรอกข้อมูลที่จำเป็นให้ถูกต้องก่อนบันทึก</span>
-              </div>
-            ) : (
-              <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300">
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-                <span>ข้อมูลพร้อมบันทึก</span>
-              </div>
-            )}
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Link href="/coupons" className={buttonVariants({ variant: "ghost", size: "lg" })}>
-              ยกเลิก
-            </Link>
-            <Button
-              size="lg"
-              onClick={save}
-              disabled={saveDisabled}
-              className="bg-foreground text-background hover:bg-foreground/90"
-              title={!validation.isValid ? "กรุณากรอกข้อมูลที่จำเป็นให้ถูกต้องก่อนบันทึก" : undefined}
-            >
-              {saving ? (
-                <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              ) : (
-                <Save />
-              )}
-              {saving
-                ? "กำลังบันทึก..."
-                : saved
-                  ? "บันทึกแล้ว"
-                  : isEdit
-                    ? "บันทึกการแก้ไข"
-                    : "บันทึกคูปอง"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
